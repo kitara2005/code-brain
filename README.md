@@ -125,6 +125,22 @@ code-brain: Done in 15s
   Wiki: 45 module pages at wiki/
 ```
 
+### Step 3b: Visualize dependencies (optional)
+
+```bash
+npx code-brain graph
+```
+
+Opens an interactive graph in your browser:
+
+- **Click a module** → see symbols, files, purpose, and all relationships
+- **Click a relationship tag** → navigate to that module
+- **Press `/`** → search modules by name
+- **Drag & zoom** → rearrange the layout
+- **Highlighted connections** — clicking a module dims unrelated nodes
+
+The graph shows typed relationships: `depends_on` (solid), `extends` (dashed red), `implements` (dashed blue).
+
 ### Step 4: Connect MCP server to Claude Code
 
 ```bash
@@ -200,6 +216,7 @@ After running `claude mcp add code-brain -- npx code-brain serve`, these tools a
 
 ```bash
 code-brain build [path]    # Parse codebase → index + wiki skeleton
+code-brain graph [path]    # Generate interactive dependency graph (opens browser)
 code-brain serve           # Start MCP server (stdio, for Claude Code)
 code-brain lint            # Check wiki for dead refs + unenriched pages
 code-brain init            # Create code-brain.config.json template
