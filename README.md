@@ -176,7 +176,7 @@ Claude Code:
 ```
 User: "Fix the auth middleware bug"
 Claude Code:
-  cb_symbol("authMiddleware") → file:line           ~200 tokens
+  code_brain_symbol("authMiddleware") → file:line           ~200 tokens
   Read(wiki/modules/auth.md)  → purpose + gotchas   ~1.5K tokens
   Read(auth.ts:45-80)         → exact function       ~500 tokens
   Total navigation:                                 ~2K tokens
@@ -190,11 +190,11 @@ After running `claude mcp add code-brain -- npx code-brain serve`, these tools a
 
 | Tool | Input | Returns | Use when |
 |------|-------|---------|----------|
-| `cb_search` | `"auth middleware"` | Matching symbols + modules | "Where is X?" |
-| `cb_module` | `"auth"` | Purpose, key files, deps, gotchas | "What does module X do?" |
-| `cb_symbol` | `"validateToken"` | Exact file:line + signature | "Where is function X?" |
-| `cb_relations` | `"auth"` | Dependency graph | "What depends on X?" |
-| `cb_file_symbols` | `"auth.ts"` | All symbols in file | "What's in this file?" |
+| `code_brain_search` | `"auth middleware"` | Matching symbols + modules | "Where is X?" |
+| `code_brain_module` | `"auth"` | Purpose, key files, deps, gotchas | "What does module X do?" |
+| `code_brain_symbol` | `"validateToken"` | Exact file:line + signature | "Where is function X?" |
+| `code_brain_relations` | `"auth"` | Dependency graph | "What depends on X?" |
+| `code_brain_file_symbols` | `"auth.ts"` | All symbols in file | "What's in this file?" |
 
 ## CLI Reference
 

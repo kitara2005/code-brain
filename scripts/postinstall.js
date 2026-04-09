@@ -42,11 +42,11 @@ Read \`wiki/index.md\` first when you need to understand a module, find related 
 3. Then Read/Grep source files — using exact paths from the wiki page
 
 ### MCP Tools (if connected)
-- \`cb_search("query")\` — fuzzy search symbols + modules
-- \`cb_module("name")\` — module summary, key files, gotchas
-- \`cb_symbol("name")\` — exact function/class → file:line
-- \`cb_relations("name")\` — module dependency graph
-- \`cb_file_symbols("file")\` — all symbols in a file
+- \`code_brain_search("query")\` — fuzzy search symbols + modules
+- \`code_brain_module("name")\` — module summary, key files, gotchas
+- \`code_brain_symbol("name")\` — exact function/class → file:line
+- \`code_brain_relations("name")\` — module dependency graph
+- \`code_brain_file_symbols("file")\` — all symbols in a file
 
 ### Maintenance
 - \`/code-brain\` — rebuild wiki (LLM) + index (AST)

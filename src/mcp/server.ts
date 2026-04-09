@@ -23,7 +23,7 @@ function query(sql: string, params: any[] = []): any[] {
 const server = new McpServer({ name: "code-brain", version: "0.1.0" });
 
 server.tool(
-  "cb_search",
+  "code_brain_search",
   "Fuzzy search symbols + modules. Use for finding code by intent.",
   { query: z.string(), limit: z.number().optional().default(10) },
   async ({ query: q, limit }) => {
@@ -46,7 +46,7 @@ server.tool(
 );
 
 server.tool(
-  "cb_module",
+  "code_brain_module",
   "Get module summary: purpose, key files, dependencies, gotchas.",
   { name: z.string() },
   async ({ name }) => {
@@ -59,7 +59,7 @@ server.tool(
 );
 
 server.tool(
-  "cb_symbol",
+  "code_brain_symbol",
   "Exact symbol lookup — file:line for function/class/method.",
   { name: z.string() },
   async ({ name }) => {
@@ -70,7 +70,7 @@ server.tool(
 );
 
 server.tool(
-  "cb_relations",
+  "code_brain_relations",
   "Module dependency graph — what depends on what.",
   { module: z.string() },
   async ({ module }) => {
@@ -83,7 +83,7 @@ server.tool(
 );
 
 server.tool(
-  "cb_file_symbols",
+  "code_brain_file_symbols",
   "List all symbols in a file — mini table of contents.",
   { file: z.string() },
   async ({ file }) => {
