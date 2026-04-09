@@ -85,6 +85,23 @@ switch (command) {
     break;
   }
 
+  case "graph": {
+    const { openDbReadOnly } = await import("../dist/db.js");
+    const { loadConfig } = await import("../dist/config.js");
+    const { generateGraph } = await import("../dist/graph/graph-generator.js");
+    const config = loadConfig(projectRoot);
+    const db = await openDbReadOnly(resolve(projectRoot, config.index.path));
+    const outputPath = resolve(projectRoot, config.wiki.dir, "graph.html");
+    const stats = generateGraph(db, outputPath, config.name);
+    db.close();
+    console.log(`Graph: ${stats.nodes} modules, ${stats.edges} relations → ${outputPath}`);
+    // Auto-open in browser
+    const { exec } = await import("node:child_process");
+    const cmd = process.platform === "darwin" ? "open" : process.platform === "win32" ? "start" : "xdg-open";
+    exec(`${cmd} "${outputPath}"`);
+    break;
+  }
+
   case "help":
   case "--help":
   case "-h": {
@@ -93,6 +110,7 @@ code-brain — Turn any codebase into searchable knowledge for Claude Code
 
 Usage:
   code-brain build [path]    Parse codebase → AST index + wiki skeleton
+  code-brain graph [path]    Generate interactive dependency graph (opens browser)
   code-brain serve           Start MCP server (5 search tools, stdio)
   code-brain lint            Check wiki for dead refs and unenriched pages
   code-brain init            Create code-brain.config.json template
