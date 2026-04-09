@@ -30,7 +30,6 @@ const DEFAULT_CONFIG: CodeBrainConfig = {
       ".js": "javascript",
       ".jsx": "javascript",
       ".php": "php",
-      ".csp": "php",
     },
     exclude: ["node_modules", "vendor", ".git", "dist", "build", "__pycache__"],
   },

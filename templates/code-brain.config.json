@@ -7,8 +7,7 @@
       ".tsx": "typescript",
       ".js": "javascript",
       ".jsx": "javascript",
-      ".php": "php",
-      ".csp": "php"
+      ".php": "php"
     },
     "exclude": ["node_modules", "vendor", ".git", "dist", "build"]
   },

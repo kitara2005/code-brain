@@ -77,14 +77,16 @@ Create `code-brain.config.json` in your project root:
 |----------|--------|-----------|
 | TypeScript | tree-sitter-typescript | .ts, .tsx |
 | JavaScript | tree-sitter-javascript | .js, .jsx |
-| PHP | tree-sitter-php | .php, .csp |
+| PHP | tree-sitter-php | .php |
+
+Custom extensions (e.g., `.csp` for PHP) can be added in `code-brain.config.json`.
 
 ## Proven Results
 
-Tested on enterprise codebase (545K LOC, 20K files):
-- **51K symbols** indexed in 96 seconds
-- **97% token savings** on navigation (wiki + index combined)
-- **16MB** SQLite index
+Tested on a large enterprise monorepo (545K LOC, 20K files):
+- **50K symbols** indexed in ~15 seconds
+- **97% token savings** on codebase navigation
+- **15MB** SQLite index
 
 ## License
 
