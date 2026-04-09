@@ -9,6 +9,7 @@
   "scripts": {
     "build": "tsc",
     "dev": "tsc --watch",
+    "postinstall": "node scripts/postinstall.js || true",
     "build-index": "node dist/indexer/index-builder.js",
     "serve": "node dist/mcp/server.js"
   },
@@ -16,8 +17,8 @@
     "dist/",
     "bin/",
     "skill/",
-    "templates/",
-    "wiki-templates/"
+    "scripts/",
+    "templates/"
   ],
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.12.1",
