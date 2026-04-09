@@ -1,46 +1,81 @@
 #!/usr/bin/env node
 /**
- * Postinstall: copy Claude Code skill to project's .claude/skills/code-brain/
- * Runs automatically after `pnpm add -D code-brain`
+ * Postinstall:
+ * 1. Copy skill to .claude/skills/code-brain/
+ * 2. Append wiki instructions to CLAUDE.md (if exists)
+ * 3. Print MCP setup command
  */
 import fs from "node:fs";
 import path from "node:path";
 
-// Find project root (where node_modules is)
 const projectRoot = findProjectRoot(process.cwd());
 if (!projectRoot) {
-  console.error("code-brain: Could not find project root, skipping skill install");
   process.exit(0);
 }
 
-const skillSrc = path.join(findPackageDir(), "skill", "SKILL.md");
+const pkgDir = findPackageDir();
+
+// --- 1. Install skill ---
+const skillSrc = path.join(pkgDir, "skill", "SKILL.md");
 const skillDest = path.join(projectRoot, ".claude", "skills", "code-brain", "SKILL.md");
 
-if (!fs.existsSync(skillSrc)) {
-  console.error("code-brain: skill/SKILL.md not found in package, skipping");
-  process.exit(0);
-}
-
-// Create destination directory
-fs.mkdirSync(path.dirname(skillDest), { recursive: true });
-
-// Copy skill file (don't overwrite if user has customized)
-if (fs.existsSync(skillDest)) {
-  const existing = fs.readFileSync(skillDest, "utf-8");
-  const source = fs.readFileSync(skillSrc, "utf-8");
-  if (existing !== source) {
-    console.log("code-brain: .claude/skills/code-brain/SKILL.md exists (keeping your version)");
-    process.exit(0);
+if (fs.existsSync(skillSrc)) {
+  fs.mkdirSync(path.dirname(skillDest), { recursive: true });
+  if (!fs.existsSync(skillDest)) {
+    fs.copyFileSync(skillSrc, skillDest);
+    console.log("code-brain: ✅ Installed skill → .claude/skills/code-brain/SKILL.md");
   }
 }
 
-fs.copyFileSync(skillSrc, skillDest);
-console.log("code-brain: Installed skill → .claude/skills/code-brain/SKILL.md");
-console.log("code-brain: Run /code-brain in Claude Code to build wiki + index");
+// --- 2. Append wiki instructions to CLAUDE.md ---
+const claudeMdPath = path.join(projectRoot, "CLAUDE.md");
+const wikiSection = `
+## Code Brain (Wiki + Index)
+
+This project uses [code-brain](https://github.com/kitara2005/code-brain) for codebase knowledge.
+
+### Wiki
+Read \`wiki/index.md\` first when you need to understand a module, find related files, or learn a pattern.
+
+1. Read \`wiki/index.md\` — find relevant page by scanning one-line summaries
+2. Read the wiki page — get architecture, key files, patterns, gotchas
+3. Then Read/Grep source files — using exact paths from the wiki page
+
+### MCP Tools (if connected)
+- \`cb_search("query")\` — fuzzy search symbols + modules
+- \`cb_module("name")\` — module summary, key files, gotchas
+- \`cb_symbol("name")\` — exact function/class → file:line
+- \`cb_relations("name")\` — module dependency graph
+- \`cb_file_symbols("file")\` — all symbols in a file
+
+### Maintenance
+- \`/code-brain\` — rebuild wiki (LLM) + index (AST)
+- \`/code-brain update\` — update stale modules only
+- \`/code-brain lint\` — check wiki freshness
+`;
+
+if (fs.existsSync(claudeMdPath)) {
+  const content = fs.readFileSync(claudeMdPath, "utf-8");
+  if (!content.includes("Code Brain")) {
+    fs.appendFileSync(claudeMdPath, wikiSection);
+    console.log("code-brain: ✅ Added wiki instructions to CLAUDE.md");
+  }
+} else {
+  // Create minimal CLAUDE.md
+  fs.writeFileSync(claudeMdPath, `# CLAUDE.md\n\nThis file provides guidance to Claude Code.\n${wikiSection}`);
+  console.log("code-brain: ✅ Created CLAUDE.md with wiki instructions");
+}
+
+// --- 3. Print MCP setup ---
+console.log("");
+console.log("code-brain: Setup complete! Next steps:");
+console.log("  1. code-brain build              ← build AST index + wiki skeleton");
+console.log("  2. claude mcp add code-brain -- node node_modules/code-brain/bin/code-brain.js serve");
+console.log("     ↑ connects MCP tools to Claude Code");
+console.log("  3. /code-brain                   ← enrich wiki with LLM (in Claude Code)");
 
 function findProjectRoot(startDir) {
   let dir = startDir;
-  // Walk up from node_modules/code-brain/scripts/ to find package.json
   for (let i = 0; i < 10; i++) {
     const pkg = path.join(dir, "package.json");
     const nm = path.join(dir, "node_modules");
@@ -55,6 +90,5 @@ function findProjectRoot(startDir) {
 }
 
 function findPackageDir() {
-  // This script is at scripts/postinstall.js, package root is ..
   return path.resolve(path.dirname(new URL(import.meta.url).pathname), "..");
 }
