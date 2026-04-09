@@ -1,53 +1,90 @@
 /** AST parser factory — returns the right tree-sitter parser for each language */
+import { createRequire } from "node:module";
 import Parser from "tree-sitter";
 import type { Symbol } from "../types.js";
+
+// createRequire for loading native tree-sitter modules in ESM context
+const require = createRequire(import.meta.url);
 
 // Lazy-loaded parsers (only init when needed)
 let phpParser: Parser | null = null;
 let tsParser: Parser | null = null;
 let tsxParser: Parser | null = null;
 let jsParser: Parser | null = null;
+let initErrors: string[] = [];
 
-function getPhpParser(): Parser {
+function getPhpParser(): Parser | null {
   if (!phpParser) {
-    const PhpLang = require("tree-sitter-php") as any;
-    phpParser = new Parser();
-    const lang = PhpLang.php_only ?? PhpLang.php ?? PhpLang;
-    phpParser.setLanguage(lang);
+    try {
+      const PhpLang = require("tree-sitter-php");
+      phpParser = new Parser();
+      const lang = PhpLang.php_only ?? PhpLang.php ?? PhpLang;
+      phpParser.setLanguage(lang);
+    } catch (e: any) {
+      if (!initErrors.includes("php")) {
+        console.error(`  [warn] tree-sitter-php init failed: ${e.message}`);
+        initErrors.push("php");
+      }
+      return null;
+    }
   }
   return phpParser;
 }
 
-function getTsParser(): Parser {
+function getTsParser(): Parser | null {
   if (!tsParser) {
-    const TsLang = require("tree-sitter-typescript") as any;
-    tsParser = new Parser();
-    tsParser.setLanguage(TsLang.typescript);
+    try {
+      const TsLang = require("tree-sitter-typescript");
+      tsParser = new Parser();
+      tsParser.setLanguage(TsLang.typescript);
+    } catch (e: any) {
+      if (!initErrors.includes("ts")) {
+        console.error(`  [warn] tree-sitter-typescript init failed: ${e.message}`);
+        initErrors.push("ts");
+      }
+      return null;
+    }
   }
   return tsParser;
 }
 
-function getTsxParser(): Parser {
+function getTsxParser(): Parser | null {
   if (!tsxParser) {
-    const TsLang = require("tree-sitter-typescript") as any;
-    tsxParser = new Parser();
-    tsxParser.setLanguage(TsLang.tsx);
+    try {
+      const TsLang = require("tree-sitter-typescript");
+      tsxParser = new Parser();
+      tsxParser.setLanguage(TsLang.tsx);
+    } catch (e: any) {
+      if (!initErrors.includes("tsx")) {
+        console.error(`  [warn] tree-sitter-tsx init failed: ${e.message}`);
+        initErrors.push("tsx");
+      }
+      return null;
+    }
   }
   return tsxParser;
 }
 
-function getJsParser(): Parser {
+function getJsParser(): Parser | null {
   if (!jsParser) {
-    const JsLang = require("tree-sitter-javascript") as any;
-    jsParser = new Parser();
-    jsParser.setLanguage(JsLang);
+    try {
+      const JsLang = require("tree-sitter-javascript");
+      jsParser = new Parser();
+      jsParser.setLanguage(JsLang);
+    } catch (e: any) {
+      if (!initErrors.includes("js")) {
+        console.error(`  [warn] tree-sitter-javascript init failed: ${e.message}`);
+        initErrors.push("js");
+      }
+      return null;
+    }
   }
   return jsParser;
 }
 
 /** Parse a source file and extract symbols based on language */
 export function parseFile(source: string, filePath: string, language: string): Symbol[] {
-  let parser: Parser;
+  let parser: Parser | null;
 
   switch (language) {
     case "php":
@@ -60,8 +97,10 @@ export function parseFile(source: string, filePath: string, language: string): S
       parser = filePath.endsWith(".jsx") ? getTsxParser() : getJsParser();
       break;
     default:
-      return []; // unsupported language
+      return [];
   }
+
+  if (!parser) return [];
 
   try {
     const tree = parser.parse(source);
@@ -69,7 +108,7 @@ export function parseFile(source: string, filePath: string, language: string): S
     walkNode(tree.walk(), symbols, filePath, undefined, language);
     return symbols;
   } catch {
-    return []; // skip unparseable files
+    return [];
   }
 }
 
@@ -84,16 +123,12 @@ function walkNode(
   const node = cursor.currentNode;
 
   switch (node.type) {
-    // Classes (all languages)
     case "class_declaration": {
       const nameNode = node.childForFieldName("name");
       if (nameNode) {
         symbols.push({
-          name: nameNode.text,
-          kind: "class",
-          file: filePath,
-          line_start: node.startPosition.row + 1,
-          line_end: node.endPosition.row + 1,
+          name: nameNode.text, kind: "class", file: filePath,
+          line_start: node.startPosition.row + 1, line_end: node.endPosition.row + 1,
           scope: currentScope,
         });
         if (cursor.gotoFirstChild()) {
@@ -104,8 +139,6 @@ function walkNode(
       }
       break;
     }
-
-    // Interfaces (PHP + TS)
     case "interface_declaration": {
       const nameNode = node.childForFieldName("name");
       if (nameNode) {
@@ -117,8 +150,6 @@ function walkNode(
       }
       break;
     }
-
-    // Type aliases (TS)
     case "type_alias_declaration": {
       const nameNode = node.childForFieldName("name");
       if (nameNode) {
@@ -130,8 +161,6 @@ function walkNode(
       }
       break;
     }
-
-    // Functions (PHP: function_definition, JS/TS: function_declaration)
     case "function_definition":
     case "function_declaration": {
       const nameNode = node.childForFieldName("name");
@@ -145,8 +174,6 @@ function walkNode(
       }
       break;
     }
-
-    // Methods (PHP: method_declaration, JS/TS: method_definition)
     case "method_declaration":
     case "method_definition": {
       const nameNode = node.childForFieldName("name");
@@ -162,7 +189,6 @@ function walkNode(
     }
   }
 
-  // Walk children
   if (cursor.gotoFirstChild()) {
     do { walkNode(cursor, symbols, filePath, currentScope, language); } while (cursor.gotoNextSibling());
     cursor.gotoParent();
