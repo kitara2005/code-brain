@@ -54,15 +54,16 @@ Read \`wiki/index.md\` first when you need to understand a module, find related 
 - \`/code-brain lint\` — check wiki freshness
 `;
 
+const MARKER = "<!-- code-brain-auto-inserted -->";
+
 if (fs.existsSync(claudeMdPath)) {
   const content = fs.readFileSync(claudeMdPath, "utf-8");
-  if (!content.includes("Code Brain")) {
-    fs.appendFileSync(claudeMdPath, wikiSection);
+  if (!content.includes(MARKER)) {
+    fs.appendFileSync(claudeMdPath, `\n${MARKER}\n${wikiSection}`);
     console.log("code-brain: ✅ Added wiki instructions to CLAUDE.md");
   }
 } else {
-  // Create minimal CLAUDE.md
-  fs.writeFileSync(claudeMdPath, `# CLAUDE.md\n\nThis file provides guidance to Claude Code.\n${wikiSection}`);
+  fs.writeFileSync(claudeMdPath, `# CLAUDE.md\n\nThis file provides guidance to Claude Code.\n\n${MARKER}\n${wikiSection}`);
   console.log("code-brain: ✅ Created CLAUDE.md with wiki instructions");
 }
 

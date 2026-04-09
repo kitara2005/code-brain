@@ -105,11 +105,11 @@ Workflow:
   4. New Claude Code session             Auto-uses MCP tools + wiki
 
 MCP Tools (available after build):
-  cb_search("query")         Fuzzy search symbols + modules
-  cb_module("name")          Module summary, key files, gotchas
-  cb_symbol("name")          Exact symbol → file:line
-  cb_relations("name")       Module dependency graph
-  cb_file_symbols("file")    All symbols in a file
+  code_brain_search("query")         Fuzzy search symbols + modules
+  code_brain_module("name")          Module summary, key files, gotchas
+  code_brain_symbol("name")          Exact symbol → file:line
+  code_brain_relations("name")       Module dependency graph
+  code_brain_file_symbols("file")    All symbols in a file
 `);
     break;
   }

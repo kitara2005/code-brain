@@ -41,7 +41,10 @@ server.tool(
         rows = [...rows, ...modRows];
       }
       return { content: [{ type: "text" as const, text: rows.length ? formatSymbols(rows) : `No results for: ${q}` }] };
-    } catch { return { content: [{ type: "text" as const, text: `Search error: ${q}` }] }; }
+    } catch (e) {
+      console.error("code_brain_search error:", e);
+      return { content: [{ type: "text" as const, text: `Search error for "${q}". Check server logs.` }] };
+    }
   }
 );
 

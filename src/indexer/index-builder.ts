@@ -50,6 +50,10 @@ for (const sourceDir of config.source.dirs) {
     if (!language) continue;
 
     try {
+      // Skip files larger than 2MB (likely generated/minified)
+      const stat = fs.statSync(filePath);
+      if (stat.size > 2 * 1024 * 1024) continue;
+
       const source = fs.readFileSync(filePath, "utf-8");
       const relPath = path.relative(projectRoot, filePath).replace(/\\/g, "/");
 
@@ -77,8 +81,10 @@ for (const sourceDir of config.source.dirs) {
         db.run("BEGIN TRANSACTION");
         console.error(`  Processed ${totalFiles} files, ${totalSymbols} symbols...`);
       }
-    } catch {
-      // skip unparseable files
+    } catch (e) {
+      // Log but skip unparseable files (EACCES, parse errors, etc.)
+      const relPath = path.relative(projectRoot, filePath);
+      console.error(`  [warn] skipped ${relPath}: ${e instanceof Error ? e.message : "parse error"}`);
     }
   }
 }
