@@ -24,15 +24,30 @@ const server = new McpServer({ name: "code-brain", version: "0.1.0" });
 
 server.tool(
   "code_brain_search",
-  "Fuzzy search symbols + modules. Use for finding code by intent.",
-  { query: z.string(), limit: z.number().optional().default(10) },
-  async ({ query: q, limit }) => {
+  "Fuzzy search symbols + modules. Optional filters: module (scope to module), kind (class/function/method/interface/type).",
+  {
+    query: z.string().describe("Search query"),
+    module: z.string().optional().describe("Filter by module name"),
+    kind: z.string().optional().describe("Filter by symbol kind: class, function, method, interface, type"),
+    limit: z.number().optional().default(10),
+  },
+  async ({ query: q, module: mod, kind, limit }) => {
     try {
+      // Build filtered query
+      const conditions = ["lower(name) LIKE lower(?)"];
+      const params: any[] = [`%${q}%`];
+
+      if (mod) { conditions.push("module = ?"); params.push(mod); }
+      if (kind) { conditions.push("kind = ?"); params.push(kind); }
+
+      params.push(limit);
       let rows = query(
-        `SELECT name, kind, file, line_start, signature, module, scope FROM symbols WHERE lower(name) LIKE lower(?) LIMIT ?`,
-        [`%${q}%`, limit]
+        `SELECT name, kind, file, line_start, signature, module, scope FROM symbols WHERE ${conditions.join(" AND ")} LIMIT ?`,
+        params
       );
-      if (rows.length < limit) {
+
+      // Also search modules if no kind/module filter
+      if (rows.length < limit && !kind) {
         const modRows = query(
           `SELECT name, path as file, 0 as line_start, '' as signature, purpose as scope, name as module, 'module' as kind
            FROM modules WHERE lower(name) LIKE lower(?) OR lower(purpose) LIKE lower(?) LIMIT ?`,
@@ -74,10 +89,16 @@ server.tool(
 
 server.tool(
   "code_brain_relations",
-  "Module dependency graph — what depends on what.",
-  { module: z.string() },
-  async ({ module }) => {
-    const rows = query(`SELECT * FROM relations WHERE source = ? OR target = ?`, [module, module]);
+  "Module dependency graph. Optional filter by relation kind: depends_on, extends, implements, calls, tests.",
+  {
+    module: z.string().describe("Module name"),
+    kind: z.string().optional().describe("Filter by relation kind: depends_on, extends, implements, calls, tests"),
+  },
+  async ({ module, kind }) => {
+    const conditions = ["(source = ? OR target = ?)"];
+    const params: any[] = [module, module];
+    if (kind) { conditions.push("kind = ?"); params.push(kind); }
+    const rows = query(`SELECT * FROM relations WHERE ${conditions.join(" AND ")}`, params);
     const text = rows.length
       ? rows.map((r: any) => `${r.source} --[${r.kind}]--> ${r.target}`).join("\n")
       : `No relations for '${module}'.`;

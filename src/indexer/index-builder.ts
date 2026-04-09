@@ -92,9 +92,10 @@ for (const sourceDir of config.source.dirs) {
 db.run("COMMIT");
 insertSym.free();
 
-// Step 3: Resolve dependencies
+// Step 3: Resolve dependencies + typed relations
 console.error("Step 3: Resolving dependencies...");
-resolveDependencies(modules, projectRoot);
+const allRelations = resolveDependencies(modules, projectRoot);
+console.error(`  → ${allRelations.length} relations (${[...new Set(allRelations.map(r => r.kind))].join(", ")})`);
 
 // Store module info + relations
 const insertMod = db.prepare(`
@@ -107,28 +108,29 @@ const insertRel = db.prepare(`
 
 db.run("BEGIN TRANSACTION");
 for (const mod of modules) {
-  // Compute depended_by
   const dependedBy = modules
     .filter((m) => m.dependencies.includes(mod.name))
     .map((m) => m.name);
 
   insertMod.bind([
-    mod.name, mod.path, "", // purpose filled by LLM skill
+    mod.name, mod.path, "",
     JSON.stringify(mod.files.slice(0, 10).map((f) => ({ file: f }))),
     JSON.stringify(mod.dependencies),
     JSON.stringify(dependedBy),
-    "", // gotchas filled by LLM skill
+    "",
     mod.fileCount
   ]);
   insertMod.step();
   insertMod.reset();
-
-  for (const dep of mod.dependencies) {
-    insertRel.bind([mod.name, dep, "depends_on", null]);
-    insertRel.step();
-    insertRel.reset();
-  }
 }
+
+// Insert all typed relations (depends_on, extends, implements, etc.)
+for (const rel of allRelations) {
+  insertRel.bind([rel.source, rel.target, rel.kind, rel.details ?? null]);
+  insertRel.step();
+  insertRel.reset();
+}
+
 db.run("COMMIT");
 insertMod.free();
 insertRel.free();

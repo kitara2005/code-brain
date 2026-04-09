@@ -1,23 +1,29 @@
-/** Extract module dependencies from import/require statements */
+/** Extract module dependencies and typed relations from source code */
 import fs from "node:fs";
 import path from "node:path";
-import type { ModuleInfo } from "../types.js";
+import type { ModuleInfo, Relation } from "../types.js";
 
 /** Resolve dependencies between modules by scanning import/require patterns */
-export function resolveDependencies(modules: ModuleInfo[], projectRoot: string): void {
+export function resolveDependencies(modules: ModuleInfo[], projectRoot: string): Relation[] {
   const moduleNames = new Set(modules.map((m) => m.name));
+  const relations: Relation[] = [];
 
   for (const mod of modules) {
     const deps = new Set<string>();
 
-    // Sample up to 10 files per module for import analysis
-    const filesToScan = mod.files.slice(0, 10);
+    // Sample up to 15 files per module for import analysis
+    const filesToScan = mod.files.slice(0, 15);
 
     for (const relFile of filesToScan) {
       const absFile = path.join(projectRoot, relFile);
       try {
         const content = fs.readFileSync(absFile, "utf-8");
+
+        // Extract imports → depends_on
         extractImportedModules(content, relFile, moduleNames).forEach((d) => deps.add(d));
+
+        // Extract extends/implements → typed relations
+        extractTypedRelations(content, mod.name, moduleNames).forEach((r) => relations.push(r));
       } catch {
         continue;
       }
@@ -26,7 +32,21 @@ export function resolveDependencies(modules: ModuleInfo[], projectRoot: string):
     // Remove self-references
     deps.delete(mod.name);
     mod.dependencies = Array.from(deps);
+
+    // Add depends_on relations
+    for (const dep of mod.dependencies) {
+      relations.push({ source: mod.name, target: dep, kind: "depends_on" });
+    }
   }
+
+  // Deduplicate relations
+  const seen = new Set<string>();
+  return relations.filter((r) => {
+    const key = `${r.source}:${r.target}:${r.kind}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
 }
 
 /** Extract module names from import/require statements */
@@ -76,4 +96,47 @@ function extractImportedModules(content: string, filePath: string, knownModules:
   }
 
   return [...new Set(found)];
+}
+
+/** Extract extends/implements relations from class declarations */
+function extractTypedRelations(content: string, moduleName: string, knownModules: Set<string>): Relation[] {
+  const relations: Relation[] = [];
+
+  // PHP: class X extends Y, class X implements Y
+  const phpExtends = content.matchAll(/class\s+\w+\s+extends\s+([\w\\]+)/g);
+  for (const match of phpExtends) {
+    const parent = match[1].split("\\").pop() || "";
+    for (const mod of knownModules) {
+      if (mod !== moduleName && content.includes(mod)) {
+        relations.push({ source: moduleName, target: mod, kind: "extends", details: parent });
+        break;
+      }
+    }
+  }
+
+  const phpImpl = content.matchAll(/class\s+\w+[^{]*implements\s+([\w\\,\s]+)/g);
+  for (const match of phpImpl) {
+    const ifaces = match[1].split(",").map((s) => s.trim().split("\\").pop() || "");
+    for (const iface of ifaces) {
+      for (const mod of knownModules) {
+        if (mod !== moduleName && content.includes(mod)) {
+          relations.push({ source: moduleName, target: mod, kind: "implements", details: iface });
+          break;
+        }
+      }
+    }
+  }
+
+  // TS: class X extends Y, class X implements Y
+  const tsExtends = content.matchAll(/class\s+\w+\s+extends\s+([\w.]+)/g);
+  for (const match of tsExtends) {
+    for (const mod of knownModules) {
+      if (mod !== moduleName && content.includes(mod)) {
+        relations.push({ source: moduleName, target: mod, kind: "extends", details: match[1] });
+        break;
+      }
+    }
+  }
+
+  return relations;
 }
