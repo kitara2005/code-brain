@@ -9,7 +9,7 @@
   "scripts": {
     "build": "tsc",
     "dev": "tsc --watch",
-    "postinstall": "node scripts/postinstall.js || true",
+    "postinstall": "node scripts/postinstall.cjs || true",
     "build-index": "node dist/indexer/index-builder.js",
     "serve": "node dist/mcp/server.js"
   },
