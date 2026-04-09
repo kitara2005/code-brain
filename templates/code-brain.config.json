@@ -1,0 +1,25 @@
+{
+  "name": "my-project",
+  "source": {
+    "dirs": ["src/"],
+    "extensions": {
+      ".ts": "typescript",
+      ".tsx": "typescript",
+      ".js": "javascript",
+      ".jsx": "javascript",
+      ".php": "php",
+      ".csp": "php"
+    },
+    "exclude": ["node_modules", "vendor", ".git", "dist", "build"]
+  },
+  "wiki": {
+    "dir": "wiki/",
+    "maxLinesPerPage": 200
+  },
+  "index": {
+    "path": ".code-brain/index.db"
+  },
+  "mcp": {
+    "autoConfig": true
+  }
+}
