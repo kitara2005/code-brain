@@ -13,6 +13,11 @@
     "build-index": "node dist/indexer/index-builder.js",
     "serve": "node dist/mcp/server.js"
   },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/kitara2005/code-brain.git"
+  },
+  "homepage": "https://github.com/kitara2005/code-brain#readme",
   "files": [
     "dist/",
     "bin/",
