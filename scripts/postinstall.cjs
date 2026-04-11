@@ -61,6 +61,10 @@ Read \`wiki/index.md\` first when you need to understand a module, find related 
 - \`code_brain_relations("name")\` — module dependency graph
 - \`code_brain_file_symbols("file")\` — all symbols in a file
 
+### Activity Memory
+- \`code_brain_recent_activity(days=7)\` — check what was done recently (use when starting work or continuing previous task)
+- \`code_brain_activity_log(...)\` — log what you did after significant actions
+
 ### Maintenance
 - \`/code-brain\` — rebuild wiki (LLM) + index (AST)
 - \`/code-brain update\` — update stale modules only

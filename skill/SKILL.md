@@ -99,6 +99,33 @@ When enriching a module page, follow this structure:
 - **Modify {behavior}:** {file paths + steps}
 ```
 
+## Activity Memory
+
+### When to recall
+Before starting significant work, check if relevant work was done recently:
+```
+code_brain_recent_activity(days=7, module="relevant-module")
+```
+Use when: user says "continue", "tiếp tục", or you're about to work on a module.
+Skip when: simple questions, code explanations, unrelated tasks.
+
+### When to log
+After completing significant work, log it:
+```
+code_brain_activity_log(
+  action_type="implement",
+  summary="Added POST /notification/subscribe endpoint",
+  files_changed=["NotificationRoutes.csp", "SubscribeApi.csp"],
+  modules_affected=["notification"],
+  outcome="done"
+)
+```
+
+Log these: features implemented, bugs fixed, approaches abandoned, key decisions.
+Skip these: file reads, greps, trivial edits, formatting.
+
+Always log abandoned approaches with `outcome="abandoned"` and `details` explaining why — this prevents future sessions from re-trying.
+
 ## Important Rules
 
 - **Read code before writing** — don't guess purpose or gotchas

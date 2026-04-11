@@ -50,4 +50,27 @@ export function initSchema(db: Database): void {
       value TEXT
     )
   `);
+
+  // Session memory — Claude's activity log (7 days default)
+  db.run(`
+    CREATE TABLE IF NOT EXISTS activity_log (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      timestamp TEXT NOT NULL DEFAULT (datetime('now')),
+      session_id TEXT,
+      action_type TEXT NOT NULL,
+      summary TEXT NOT NULL,
+      files_changed TEXT,
+      modules_affected TEXT,
+      outcome TEXT DEFAULT 'done',
+      details TEXT
+    )
+  `);
+  db.run(`CREATE INDEX IF NOT EXISTS idx_activity_time ON activity_log(timestamp)`);
+}
+
+/** Cleanup activity entries older than retentionDays */
+export function cleanupActivity(db: Database, retentionDays: number = 7): number {
+  db.run("DELETE FROM activity_log WHERE timestamp < datetime('now', '-' || ? || ' days')", [retentionDays]);
+  const result = db.exec("SELECT changes()");
+  return result[0]?.values[0]?.[0] as number || 0;
 }

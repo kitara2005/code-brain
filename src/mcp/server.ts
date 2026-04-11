@@ -1,15 +1,24 @@
 #!/usr/bin/env node
-/** code-brain MCP Server — 5 code search tools over stdio */
+/** code-brain MCP Server — 7 tools: 5 search + 2 activity memory */
 import path from "node:path";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
-import { openDbReadOnly } from "../db.js";
+import { openDb } from "../db.js";
+import { cleanupActivity } from "../schema.js";
+import { initSchema } from "../schema.js";
 
 const indexPath = process.env.CODE_BRAIN_INDEX
   || path.join(process.cwd(), ".code-brain/index.db");
 
-const db = await openDbReadOnly(indexPath);
+// Open read-write (activity_log needs writes)
+const db = await openDb(indexPath);
+
+// Ensure activity_log table exists (in case index was built before this feature)
+initSchema(db);
+
+// Cleanup old activity entries (>7 days)
+cleanupActivity(db, 7);
 
 function query(sql: string, params: any[] = []): any[] {
   const stmt = db.prepare(sql);
@@ -117,6 +126,89 @@ server.tool(
       ? rows.map((r: any) => `L${r.line_start} ${r.kind} ${r.scope ? `${r.scope}::` : ""}${r.name}${r.signature ? ` ${r.signature}` : ""}`).join("\n")
       : `No symbols in '${file}'.`;
     return { content: [{ type: "text" as const, text }] };
+  }
+);
+
+// --- Tool 6: code_brain_activity_log (write) ---
+server.tool(
+  "code_brain_activity_log",
+  "Log what you just did. Call after implementing features, fixing bugs, or making key decisions. Helps future sessions avoid repeating work.",
+  {
+    action_type: z.enum(["implement", "fix", "research", "refactor", "debug", "review", "decision"]).describe("Type of action"),
+    summary: z.string().describe("1-2 sentences: what was done and why"),
+    files_changed: z.array(z.string()).optional().describe("Files modified"),
+    modules_affected: z.array(z.string()).optional().describe("Modules involved"),
+    outcome: z.enum(["done", "partial", "abandoned", "blocked"]).optional().default("done"),
+    details: z.string().optional().describe("Longer context: decisions made, approaches tried, why abandoned"),
+  },
+  async ({ action_type, summary, files_changed, modules_affected, outcome, details }) => {
+    try {
+      const stmt = db.prepare(
+        `INSERT INTO activity_log (action_type, summary, files_changed, modules_affected, outcome, details)
+         VALUES (?, ?, ?, ?, ?, ?)`
+      );
+      stmt.bind([
+        action_type, summary,
+        files_changed ? JSON.stringify(files_changed) : null,
+        modules_affected ? JSON.stringify(modules_affected) : null,
+        outcome || "done",
+        details || null,
+      ]);
+      stmt.step();
+      stmt.free();
+      // Persist to disk
+      const { saveDb } = await import("../db.js");
+      saveDb(db, indexPath);
+      return { content: [{ type: "text" as const, text: `Logged: [${action_type}] ${summary}` }] };
+    } catch (e) {
+      console.error("activity_log error:", e);
+      return { content: [{ type: "text" as const, text: "Failed to log activity." }] };
+    }
+  }
+);
+
+// --- Tool 7: code_brain_recent_activity (read) ---
+server.tool(
+  "code_brain_recent_activity",
+  "Get recent activity log. Use when you need context about what was done recently — avoid repeating completed work or re-trying abandoned approaches.",
+  {
+    days: z.number().optional().default(7).describe("How many days back to look"),
+    action_type: z.string().optional().describe("Filter by type: implement, fix, research, etc."),
+    module: z.string().optional().describe("Filter by module name"),
+  },
+  async ({ days, action_type, module }) => {
+    try {
+      const conditions = [`timestamp > datetime('now', '-${days} days')`];
+      const params: any[] = [];
+
+      if (action_type) { conditions.push("action_type = ?"); params.push(action_type); }
+      if (module) { conditions.push("modules_affected LIKE ?"); params.push(`%${module}%`); }
+
+      const rows = query(
+        `SELECT timestamp, action_type, summary, modules_affected, outcome, details
+         FROM activity_log WHERE ${conditions.join(" AND ")}
+         ORDER BY timestamp DESC LIMIT 50`,
+        params
+      );
+
+      if (rows.length === 0) {
+        return { content: [{ type: "text" as const, text: `No activity in the last ${days} days.` }] };
+      }
+
+      const outcomeIcon: Record<string, string> = { done: "✅", partial: "🔶", abandoned: "❌", blocked: "🚫" };
+      const lines = rows.map((r: any) => {
+        const date = (r.timestamp as string).split("T")[0] || r.timestamp;
+        const icon = outcomeIcon[r.outcome] || "•";
+        const mods = r.modules_affected ? ` (${r.modules_affected})` : "";
+        const detail = r.details ? `\n     ↳ ${r.details}` : "";
+        return `${icon} [${date}] ${r.action_type}: ${r.summary}${mods}${detail}`;
+      });
+
+      return { content: [{ type: "text" as const, text: `Recent activity (${days} days):\n${lines.join("\n")}` }] };
+    } catch (e) {
+      console.error("recent_activity error:", e);
+      return { content: [{ type: "text" as const, text: "Failed to read activity log." }] };
+    }
   }
 );
 
