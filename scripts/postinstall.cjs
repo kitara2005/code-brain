@@ -61,9 +61,21 @@ Read \`wiki/index.md\` first when you need to understand a module, find related 
 - \`code_brain_relations("name")\` — module dependency graph
 - \`code_brain_file_symbols("file")\` — all symbols in a file
 
-### Activity Memory
-- \`code_brain_recent_activity(days=7)\` — check what was done recently (use when starting work or continuing previous task)
-- \`code_brain_activity_log(...)\` — log what you did after significant actions
+### Activity Memory (IMPORTANT)
+
+**Before working on a module**, check recent activity to avoid repeating work:
+\`code_brain_recent_activity(days=7, module="module-name")\`
+
+Call this when:
+- User says "continue", "tiếp tục", or references previous work
+- You are about to implement a feature or fix a bug
+- You want to know what approaches were already tried
+
+**After completing significant work**, log it:
+\`code_brain_activity_log(action_type="implement", summary="what you did", modules_affected=["module"], outcome="done")\`
+
+Always log: features done, bugs fixed, approaches abandoned (with details why).
+Skip logging: file reads, questions, trivial edits.
 
 ### Maintenance
 - \`/code-brain\` — rebuild wiki (LLM) + index (AST)
