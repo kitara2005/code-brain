@@ -147,7 +147,7 @@ The graph shows typed relationships: `depends_on` (solid), `extends` (dashed red
 claude mcp add code-brain -- npx code-brain serve
 ```
 
-This lets Claude Code use the 5 search tools directly.
+This lets Claude Code use the 7 tools (5 search + 2 memory) directly.
 
 ### Step 5: Enrich wiki with LLM (optional but recommended)
 
@@ -211,6 +211,35 @@ After running `claude mcp add code-brain -- npx code-brain serve`, these tools a
 | `code_brain_symbol` | `"validateToken"` | Exact file:line + signature | "Where is function X?" |
 | `code_brain_relations` | `"auth"` | Dependency graph | "What depends on X?" |
 | `code_brain_file_symbols` | `"auth.ts"` | All symbols in file | "What's in this file?" |
+| `code_brain_recent_activity` | `days=7` | Recent work history | "What was done recently?" |
+| `code_brain_activity_log` | `summary="..."` | Logs action | After implementing/fixing |
+
+### Activity Memory
+
+Claude remembers what it did across sessions (7-day retention). This avoids repeating work or re-trying abandoned approaches.
+
+**Lazy recall** — not auto-loaded every session. Claude queries only when needed:
+
+```
+User: "Continue the notification feature"
+Claude: code_brain_recent_activity(days=7, module="notification")
+→ "✅ [Apr 8] implement: Added POST /subscribe endpoint (notification)
+   ❌ [Apr 7] research: Tried WebSocket approach → abandoned (too complex)"
+Claude: Knows to skip WebSocket, continue from /subscribe.
+```
+
+**Auto-log** — Claude logs after significant work:
+```
+Claude finishes fixing a bug →
+  code_brain_activity_log(
+    action_type="fix",
+    summary="Fixed ACL cache not flushing in schedule module",
+    modules_affected=["schedule"],
+    outcome="done"
+  )
+```
+
+Token cost: ~50 tokens per log entry, ~500-3500 tokens per recall (only when needed).
 
 ## CLI Reference
 
