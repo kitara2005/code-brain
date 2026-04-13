@@ -274,6 +274,72 @@ Claude finishes fixing a bug →
 
 Token cost: ~50 tokens per log entry, ~500-3500 tokens per recall (only when needed).
 
+### Memory Configuration
+
+```json
+// code-brain.config.json
+{
+  "memory": {
+    "retentionDays": 7    // default: 7 days. Set 0 to disable.
+  }
+}
+```
+
+### Memory Storage
+
+Activity log lives in the same SQLite file as the code index:
+
+```
+.code-brain/index.db
+├── symbols          ← AST symbols (50K+)
+├── modules          ← wiki module data
+├── relations        ← module dependencies
+├── meta             ← build metadata
+└── activity_log     ← session memory (auto-cleaned)
+```
+
+Each entry stores:
+| Field | Description | Example |
+|-------|-------------|---------|
+| `timestamp` | When (auto-set) | `2026-04-11T08:30:00` |
+| `action_type` | What kind | `implement`, `fix`, `research`, `refactor`, `debug`, `review`, `decision` |
+| `summary` | What was done | `"Added POST /subscribe endpoint"` |
+| `files_changed` | Files modified | `["Routes.ts", "Subscribe.ts"]` |
+| `modules_affected` | Modules involved | `["notification"]` |
+| `outcome` | Result | `done`, `partial`, `abandoned`, `blocked` |
+| `details` | Why/context | `"Tried WebSocket first, too complex"` |
+
+### Memory Lifecycle
+
+```
+Write (during session):
+  Claude calls code_brain_activity_log → INSERT into activity_log → saved to disk
+
+Read (when needed):
+  Claude calls code_brain_recent_activity → SELECT from activity_log → returns formatted list
+
+Auto-cleanup (on build or MCP start):
+  DELETE FROM activity_log WHERE timestamp > retentionDays
+
+Manual clear:
+  npx code-brain clear-memory → DELETE all entries
+
+Rebuild safety:
+  code-brain build clears symbols/modules/relations but PRESERVES activity_log
+```
+
+### When Claude Recalls vs Skips
+
+| Situation | Recalls memory? | Why |
+|-----------|----------------|-----|
+| "Continue the feature from yesterday" | ✅ Yes | Needs context of previous work |
+| "Fix bug in schedule module" | ✅ Yes | Check if similar fix was done recently |
+| "Explain how this function works" | ❌ No | Just reading code, no history needed |
+| "Refactor auth middleware" | ✅ Yes | Check if anyone tried this before |
+| "What time is it?" | ❌ No | Unrelated to codebase work |
+
+This is **lazy recall** — memory is NOT loaded automatically. Claude only queries when it judges the context would be useful. This saves ~3.5K tokens per session when memory isn't needed.
+
 ## CLI Reference
 
 ```bash
