@@ -193,7 +193,7 @@ Default config:
 npx code-brain build
 ```
 
-Output on a large codebase (enterprise codebase, 545K LOC):
+Output on a large enterprise codebase (545K LOC):
 ```
 Step 1: Scanning modules...    → 145 modules found
 Step 2: Parsing source files... → 7,232 files, 49,088 symbols
