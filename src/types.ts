@@ -7,6 +7,7 @@ export interface Symbol {
   signature?: string;
   module?: string;
   scope?: string;
+  snippet?: string;
 }
 
 export interface ModuleInfo {

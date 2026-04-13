@@ -67,12 +67,20 @@ export function parseFile(source: string, filePath: string, language: string): S
 
   try {
     const tree = parser.parse(source);
+    const sourceLines = source.split("\n");
     const symbols: Symbol[] = [];
-    walkNode(tree.walk(), symbols, filePath, undefined);
+    walkNode(tree.walk(), symbols, filePath, undefined, sourceLines);
     return symbols;
   } catch {
     return [];
   }
+}
+
+/** Extract snippet: up to 10 lines starting from line_start */
+function makeSnippet(sourceLines: string[], lineStart: number, lineEnd: number): string {
+  const startIdx = Math.max(0, lineStart - 1);
+  const endIdx = Math.min(sourceLines.length, Math.min(lineEnd, lineStart + 9));
+  return sourceLines.slice(startIdx, endIdx).join("\n");
 }
 
 /** Recursively walk AST and extract symbols */
@@ -80,7 +88,8 @@ function walkNode(
   cursor: Parser.TreeCursor,
   symbols: Symbol[],
   filePath: string,
-  currentScope: string | undefined
+  currentScope: string | undefined,
+  sourceLines: string[]
 ): void {
   const node = cursor.currentNode;
 
@@ -98,7 +107,7 @@ function walkNode(
           scope: currentScope,
         });
         if (cursor.gotoFirstChild()) {
-          do { walkNode(cursor, symbols, filePath, nameNode.text); } while (cursor.gotoNextSibling());
+          do { walkNode(cursor, symbols, filePath, nameNode.text, sourceLines); } while (cursor.gotoNextSibling());
           cursor.gotoParent();
         }
         return;
@@ -117,7 +126,7 @@ function walkNode(
           scope: currentScope,
         });
         if (cursor.gotoFirstChild()) {
-          do { walkNode(cursor, symbols, filePath, nameNode.text); } while (cursor.gotoNextSibling());
+          do { walkNode(cursor, symbols, filePath, nameNode.text, sourceLines); } while (cursor.gotoNextSibling());
           cursor.gotoParent();
         }
         return;
@@ -135,7 +144,7 @@ function walkNode(
           scope: currentScope,
         });
         if (cursor.gotoFirstChild()) {
-          do { walkNode(cursor, symbols, filePath, nameNode.text); } while (cursor.gotoNextSibling());
+          do { walkNode(cursor, symbols, filePath, nameNode.text, sourceLines); } while (cursor.gotoNextSibling());
           cursor.gotoParent();
         }
         return;
@@ -182,10 +191,13 @@ function walkNode(
       if (nameNode) {
         const params = node.childForFieldName("parameters");
         const kind = currentScope ? "method" : "function";
+        const ls = node.startPosition.row + 1;
+        const le = node.endPosition.row + 1;
         symbols.push({
           name: nameNode.text, kind, file: filePath,
-          line_start: node.startPosition.row + 1, line_end: node.endPosition.row + 1,
+          line_start: ls, line_end: le,
           signature: params?.text, scope: currentScope,
+          snippet: makeSnippet(sourceLines, ls, le),
         });
       }
       break;
@@ -196,10 +208,13 @@ function walkNode(
       const nameNode = node.childForFieldName("name");
       if (nameNode) {
         const params = node.childForFieldName("parameters");
+        const ls = node.startPosition.row + 1;
+        const le = node.endPosition.row + 1;
         symbols.push({
           name: nameNode.text, kind: "method", file: filePath,
-          line_start: node.startPosition.row + 1, line_end: node.endPosition.row + 1,
+          line_start: ls, line_end: le,
           signature: params?.text, scope: currentScope,
+          snippet: makeSnippet(sourceLines, ls, le),
         });
       }
       break;
@@ -209,7 +224,7 @@ function walkNode(
     case "impl_item": {
       const typeNode = node.childForFieldName("type");
       if (typeNode && cursor.gotoFirstChild()) {
-        do { walkNode(cursor, symbols, filePath, typeNode.text); } while (cursor.gotoNextSibling());
+        do { walkNode(cursor, symbols, filePath, typeNode.text, sourceLines); } while (cursor.gotoNextSibling());
         cursor.gotoParent();
         return;
       }
@@ -221,10 +236,13 @@ function walkNode(
       const nameNode = node.childForFieldName("name");
       if (nameNode) {
         const params = node.childForFieldName("parameters");
+        const ls = node.startPosition.row + 1;
+        const le = node.endPosition.row + 1;
         symbols.push({
           name: nameNode.text, kind: "function", file: filePath,
-          line_start: node.startPosition.row + 1, line_end: node.endPosition.row + 1,
+          line_start: ls, line_end: le,
           signature: params?.text, scope: currentScope,
+          snippet: makeSnippet(sourceLines, ls, le),
         });
       }
       break;
@@ -233,7 +251,7 @@ function walkNode(
 
   // Walk children
   if (cursor.gotoFirstChild()) {
-    do { walkNode(cursor, symbols, filePath, currentScope); } while (cursor.gotoNextSibling());
+    do { walkNode(cursor, symbols, filePath, currentScope, sourceLines); } while (cursor.gotoNextSibling());
     cursor.gotoParent();
   }
 }

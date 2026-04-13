@@ -25,9 +25,12 @@ export function initSchema(db: Database): void {
       line_end INTEGER,
       signature TEXT,
       module TEXT,
-      scope TEXT
+      scope TEXT,
+      snippet TEXT
     )
   `);
+  // Upgrade older schema
+  try { db.run(`ALTER TABLE symbols ADD COLUMN snippet TEXT`); } catch {}
 
   db.run(`CREATE INDEX IF NOT EXISTS idx_sym_name ON symbols(name)`);
   db.run(`CREATE INDEX IF NOT EXISTS idx_sym_name_lower ON symbols(lower(name))`);
@@ -76,6 +79,19 @@ export function initSchema(db: Database): void {
   try { db.run(`ALTER TABLE activity_log ADD COLUMN attempt_history TEXT`); } catch {}
   try { db.run(`ALTER TABLE activity_log ADD COLUMN conditions_failed TEXT`); } catch {}
 
+  // File-level summaries (extracted from top comment/docstring + exports)
+  db.run(`
+    CREATE TABLE IF NOT EXISTS file_summaries (
+      file TEXT PRIMARY KEY,
+      module TEXT,
+      summary TEXT,
+      exports TEXT,
+      imports TEXT,
+      line_count INTEGER
+    )
+  `);
+  db.run(`CREATE INDEX IF NOT EXISTS idx_file_sum_module ON file_summaries(module)`);
+
   // Consolidated patterns library (semantic memory)
   db.run(`
     CREATE TABLE IF NOT EXISTS patterns (
@@ -107,10 +123,11 @@ export function clearActivity(db: Database): void {
   db.run("DELETE FROM activity_log");
 }
 
-/** Clear index tables (symbols, modules, relations) but KEEP activity_log */
+/** Clear index tables (symbols, modules, relations, file_summaries) but KEEP activity_log + patterns */
 export function clearIndex(db: Database): void {
   db.run("DELETE FROM symbols");
   db.run("DELETE FROM modules");
   db.run("DELETE FROM relations");
+  db.run("DELETE FROM file_summaries");
   db.run("DELETE FROM meta");
 }

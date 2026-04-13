@@ -87,14 +87,53 @@ server.tool(
 
 server.tool(
   "code_brain_symbol",
-  "Exact symbol lookup — file:line for function/class/method.",
-  { name: z.string() },
-  async ({ name }) => {
+  "Exact symbol lookup — file:line + code snippet for function/class/method. Returns first ~10 lines of implementation so you don't need to Read() the file.",
+  {
+    name: z.string(),
+    with_snippet: z.boolean().optional().default(true).describe("Include code snippet (default true)"),
+  },
+  async ({ name, with_snippet }) => {
     let rows = query(`SELECT * FROM symbols WHERE name = ? ORDER BY kind, file`, [name]);
     if (!rows.length) rows = query(`SELECT * FROM symbols WHERE lower(name) LIKE lower(?) LIMIT 20`, [`%${name}%`]);
-    return { content: [{ type: "text" as const, text: rows.length ? formatSymbols(rows) : `Symbol '${name}' not found.` }] };
+    if (!rows.length) {
+      return { content: [{ type: "text" as const, text: `Symbol '${name}' not found.` }] };
+    }
+    const text = rows.map((r: any) => {
+      const header = `[${r.kind}] ${r.scope ? `${r.scope}::` : ""}${r.name} — ${r.file}:${r.line_start}${r.signature ? ` ${r.signature}` : ""}${r.module ? ` (${r.module})` : ""}`;
+      if (with_snippet && r.snippet) {
+        return `${header}\n\`\`\`\n${r.snippet}\n\`\`\``;
+      }
+      return header;
+    }).join("\n\n");
+    return { content: [{ type: "text" as const, text }] };
   }
 );
+
+server.tool(
+  "code_brain_file_summary",
+  "Get 1-line summary of a file + exports + imports. Use BEFORE reading a file to check if it's relevant.",
+  { file: z.string().describe("File path or partial match") },
+  async ({ file }) => {
+    const pattern = file.includes("/") ? `%${file}` : `%${file}%`;
+    const rows = query(
+      `SELECT file, module, summary, exports, imports, line_count FROM file_summaries WHERE file LIKE ? LIMIT 10`,
+      [pattern]
+    );
+    if (!rows.length) {
+      return { content: [{ type: "text" as const, text: `No summary for '${file}'. Run: code-brain build` }] };
+    }
+    const text = rows.map((r: any) => {
+      const exports = safeJson(r.exports);
+      const imports = safeJson(r.imports);
+      return `📄 ${r.file} (${r.line_count} lines${r.module ? `, ${r.module}` : ""})\n   ${r.summary}${exports.length ? `\n   Exports: ${exports.join(", ")}` : ""}${imports.length ? `\n   Imports: ${imports.slice(0, 3).join(", ")}` : ""}`;
+    }).join("\n\n");
+    return { content: [{ type: "text" as const, text }] };
+  }
+);
+
+function safeJson(s: string): string[] {
+  try { return JSON.parse(s) || []; } catch { return []; }
+}
 
 server.tool(
   "code_brain_relations",

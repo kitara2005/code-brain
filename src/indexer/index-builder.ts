@@ -7,6 +7,7 @@ import { openDb, saveDb } from "../db.js";
 import { initSchema, clearIndex, cleanupActivity } from "../schema.js";
 import { scanModules, collectFiles } from "./module-scanner.js";
 import { parseFile } from "./ast-parser.js";
+import { extractFileSummary, insertFileSummary } from "./file-summarizer.js";
 import { resolveDependencies } from "./dependency-resolver.js";
 import type { CodeBrainConfig } from "../config.js";
 
@@ -38,8 +39,8 @@ let totalFiles = 0;
 let totalSymbols = 0;
 
 const insertSym = db.prepare(`
-  INSERT INTO symbols (name, kind, file, line_start, line_end, signature, module, scope)
-  VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+  INSERT INTO symbols (name, kind, file, line_start, line_end, signature, module, scope, snippet)
+  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
 `);
 
 db.run("BEGIN TRANSACTION");
@@ -74,12 +75,18 @@ for (const sourceDir of config.source.dirs) {
         insertSym.bind([
           sym.name, sym.kind, sym.file, sym.line_start,
           sym.line_end ?? null, sym.signature ?? null,
-          moduleName ?? null, sym.scope ?? null
+          moduleName ?? null, sym.scope ?? null,
+          sym.snippet ?? null,
         ]);
         insertSym.step();
         insertSym.reset();
         totalSymbols++;
       }
+
+      // Extract + store file summary
+      const fileSummary = extractFileSummary(source, relPath);
+      insertFileSummary(db, fileSummary, moduleName);
+
       totalFiles++;
 
       if (totalFiles % 1000 === 0) {
