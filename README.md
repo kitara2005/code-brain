@@ -331,6 +331,10 @@ Each module page contains:
 | TypeScript | tree-sitter-typescript | .ts, .tsx | ✅ Stable |
 | JavaScript | tree-sitter-javascript | .js, .jsx | ✅ Stable |
 | PHP | tree-sitter-php | .php | ✅ Stable |
+| Python | tree-sitter-python | .py | ✅ Stable |
+| Go | tree-sitter-go | .go | ✅ Stable |
+| Rust | tree-sitter-rust | .rs | ✅ Stable |
+| Java | tree-sitter-java | .java | ✅ Stable |
 
 Custom file extensions can be mapped in `code-brain.config.json`:
 ```json
@@ -338,13 +342,12 @@ Custom file extensions can be mapped in `code-brain.config.json`:
   "source": {
     "extensions": {
       ".csp": "php",
-      ".mjs": "javascript"
+      ".mjs": "javascript",
+      ".kt": "java"
     }
   }
 }
 ```
-
-Future: Python, Go, Rust, Java (PRs welcome).
 
 ## Team Workflow
 
