@@ -15,6 +15,9 @@ export interface CodeBrainConfig {
   index: {
     path: string;
   };
+  memory: {
+    retentionDays: number;
+  };
   mcp: {
     autoConfig: boolean;
   };
@@ -44,6 +47,9 @@ const DEFAULT_CONFIG: CodeBrainConfig = {
   index: {
     path: ".code-brain/index.db",
   },
+  memory: {
+    retentionDays: 7,
+  },
   mcp: {
     autoConfig: true,
   },
@@ -70,6 +76,7 @@ export function loadConfig(projectRoot: string): CodeBrainConfig {
     source: { ...DEFAULT_CONFIG.source, ...userConfig.source },
     wiki: { ...DEFAULT_CONFIG.wiki, ...userConfig.wiki },
     index: { ...DEFAULT_CONFIG.index, ...userConfig.index },
+    memory: { ...DEFAULT_CONFIG.memory, ...userConfig.memory },
     mcp: { ...DEFAULT_CONFIG.mcp, ...userConfig.mcp },
   };
 

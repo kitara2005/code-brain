@@ -4,7 +4,7 @@ import path from "node:path";
 import fs from "node:fs";
 import { loadConfig } from "../config.js";
 import { openDb, saveDb } from "../db.js";
-import { initSchema } from "../schema.js";
+import { initSchema, clearIndex, cleanupActivity } from "../schema.js";
 import { scanModules, collectFiles } from "./module-scanner.js";
 import { parseFile } from "./ast-parser.js";
 import { resolveDependencies } from "./dependency-resolver.js";
@@ -19,6 +19,12 @@ const startTime = Date.now();
 
 const db = await openDb(dbPath);
 initSchema(db);
+
+// Clear index tables (symbols, modules, relations) but KEEP activity_log
+clearIndex(db);
+
+// Cleanup old activity entries during build (use config retention)
+cleanupActivity(db, config.memory.retentionDays);
 
 // Step 1: Scan modules
 console.error("Step 1: Scanning modules...");

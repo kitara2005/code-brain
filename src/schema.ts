@@ -74,3 +74,16 @@ export function cleanupActivity(db: Database, retentionDays: number = 7): number
   const result = db.exec("SELECT changes()");
   return result[0]?.values[0]?.[0] as number || 0;
 }
+
+/** Clear all activity entries */
+export function clearActivity(db: Database): void {
+  db.run("DELETE FROM activity_log");
+}
+
+/** Clear index tables (symbols, modules, relations) but KEEP activity_log */
+export function clearIndex(db: Database): void {
+  db.run("DELETE FROM symbols");
+  db.run("DELETE FROM modules");
+  db.run("DELETE FROM relations");
+  db.run("DELETE FROM meta");
+}

@@ -102,6 +102,24 @@ switch (command) {
     break;
   }
 
+  case "clear-memory": {
+    const { openDb, saveDb } = await import("../dist/db.js");
+    const { loadConfig } = await import("../dist/config.js");
+    const { clearActivity } = await import("../dist/schema.js");
+    const config = loadConfig(projectRoot);
+    const dbFile = resolve(projectRoot, config.index.path);
+    if (!existsSync(dbFile)) {
+      console.error("No index found. Nothing to clear.");
+      process.exit(1);
+    }
+    const db = await openDb(dbFile);
+    clearActivity(db);
+    saveDb(db, dbFile);
+    db.close();
+    console.log("Activity memory cleared.");
+    break;
+  }
+
   case "help":
   case "--help":
   case "-h": {
@@ -111,8 +129,9 @@ code-brain — Turn any codebase into searchable knowledge for Claude Code
 Usage:
   code-brain build [path]    Parse codebase → AST index + wiki skeleton
   code-brain graph [path]    Generate interactive dependency graph (opens browser)
-  code-brain serve           Start MCP server (5 search tools, stdio)
+  code-brain serve           Start MCP server (7 tools: 5 search + 2 memory, stdio)
   code-brain lint            Check wiki for dead refs and unenriched pages
+  code-brain clear-memory    Delete all activity memory entries
   code-brain init            Create code-brain.config.json template
   code-brain help            Show this help
 
