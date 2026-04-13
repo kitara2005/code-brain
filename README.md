@@ -2,7 +2,7 @@
 
 Turn any codebase into searchable knowledge for Claude Code.
 
-**AST Index** (tree-sitter, 7 languages) + **LLM Wiki** (markdown, git-shared) + **MCP Server** (8 tools) + **Activity Memory** (7-day, reflection-aware) + **Dependency Graph** (interactive HTML) + **Pattern Learning** (git mining + consolidation).
+**AST Index** (tree-sitter, 7 languages, with inline snippets) + **File Summaries** (1-line per file) + **LLM Wiki** (markdown, git-shared) + **MCP Server** (9 tools) + **Activity Memory** (7-day, reflection-aware) + **Dependency Graph** (interactive HTML) + **Pattern Learning** (git mining + consolidation).
 
 ---
 
@@ -51,9 +51,11 @@ That's it. New Claude Code sessions auto-use the wiki + index + MCP tools.
 
 ## Features
 
-### 1. AST Index
+### 1. AST Index (with inline snippets)
 
-tree-sitter parses all source files → SQLite database with exact file:line locations.
+tree-sitter parses all source files → SQLite database with exact file:line locations **and inline code snippets** (first ~10 lines of each function/method).
+
+Claude gets code directly from symbol lookup — no need to `Read()` the file after.
 
 **Supported languages:**
 
@@ -71,15 +73,21 @@ tree-sitter parses all source files → SQLite database with exact file:line loc
 
 **Storage:** sql.js (pure JavaScript SQLite, no native builds).
 
-### 2. LLM Wiki
+### 2. LLM Wiki + File Summaries
 
-Structured markdown pages per module, generated in 2 phases:
+**Module-level wiki** (markdown pages):
 - **Skeleton** (free, deterministic) — file lists, symbols, dependencies from AST
 - **Enrichment** (optional, LLM) — purpose, gotchas, common tasks via `/code-brain` skill
+- Lives in `wiki/` directory, git-committed so teams share knowledge
 
-Wiki lives in `wiki/` directory, git-committed so teams share knowledge.
+**File-level summaries** (auto-extracted, free):
+- 1-line summary per file (from top comment / JSDoc / docstring, or inferred from exports)
+- Exports + imports for each file
+- Line count
+- Stored in `file_summaries` table, queryable via `code_brain_file_summary` MCP tool
+- Claude checks summary BEFORE reading → decides if file is relevant
 
-### 3. MCP Server — 8 Tools
+### 3. MCP Server — 9 Tools
 
 After `claude mcp add code-brain -- npx code-brain serve`:
 
@@ -87,9 +95,10 @@ After `claude mcp add code-brain -- npx code-brain serve`:
 |------|---------|
 | `code_brain_search` | Fuzzy search symbols + modules (optional `module`, `kind` filters) |
 | `code_brain_module` | Get module summary (purpose, key files, dependencies, gotchas) |
-| `code_brain_symbol` | Exact symbol → file:line + signature |
-| `code_brain_relations` | Module dependency graph (filter by `kind`) |
+| `code_brain_symbol` | Exact symbol → file:line + **code snippet** (first ~10 lines) |
+| `code_brain_file_summary` | 1-line file summary + exports + imports (check BEFORE Reading file) |
 | `code_brain_file_symbols` | All symbols in a file |
+| `code_brain_relations` | Module dependency graph (filter by `kind`) |
 | `code_brain_recent_activity` | Past 7 days of activity (filter by `module`, `failures_only`) |
 | `code_brain_activity_log` | Log work with reflection (WHY it worked/failed) |
 | `code_brain_patterns` | Query consolidated patterns (filter by module, min success rate) |
@@ -278,11 +287,15 @@ Claude:
     → "✅ Linear backoff + health check (3× used, 100% success)"
   code_brain_symbol("authMiddleware")
     → auth.ts:45
-  Read(auth.ts:45-80) → exact function
-  Total: ~2K tokens
+      function authMiddleware(req, res, next) {
+        const token = req.headers['authorization'];
+        if (!validateToken(token)) return res.status(401).end();
+        ...
+  (snippet included — no Read() needed)
+  Total: ~1.5K tokens
 ```
 
-**~85% fewer tokens.** Plus Claude avoids retrying failed approaches.
+**~90% fewer tokens.** Plus Claude avoids retrying failed approaches.
 
 ---
 
@@ -308,7 +321,8 @@ All data in **one SQLite file** (`.code-brain/index.db`):
 
 ```
 index.db
-├── symbols          ← AST symbols (file, line, signature, module)
+├── symbols          ← AST symbols (file, line, signature, snippet, module)
+├── file_summaries   ← 1-line summaries + exports + imports per file
 ├── modules          ← wiki module data (purpose, dependencies, gotchas)
 ├── relations        ← typed module dependencies
 ├── meta             ← build metadata
@@ -369,14 +383,17 @@ Tested on a 545K LOC enterprise monorepo:
 |--------|-------|
 | Files parsed | 7,232 |
 | Symbols extracted | 49,088 |
+| Symbols with snippet | 41,553 (84%) |
+| File summaries | 6,566 |
 | Modules discovered | 145 |
 | Relations (typed) | 1,164 (depends_on + extends + implements) |
 | Git patterns extracted | 452 (from 30 days) |
 | Consolidated patterns | 66 |
-| Build time | 46 seconds |
+| Build time | 42 seconds |
 | Index size | 43 MB |
 | Token savings (wiki only) | 69% |
 | Token savings (wiki + index) | 97% |
+| Token savings (v0.2.0 with snippets) | ~98% |
 
 ---
 
