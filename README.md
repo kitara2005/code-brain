@@ -2,16 +2,20 @@
 
 Turn any codebase into searchable knowledge for Claude Code.
 
-**AST Index** (50K+ symbols, <5ms lookup) + **LLM Wiki** (compiled module knowledge) + **MCP Server** (7 tools) + **Activity Memory** (7-day recall).
+**AST Index** (tree-sitter, 7 languages) + **LLM Wiki** (markdown, git-shared) + **MCP Server** (8 tools) + **Activity Memory** (7-day, reflection-aware) + **Dependency Graph** (interactive HTML) + **Pattern Learning** (git mining + consolidation).
+
+---
 
 ## Why
 
 Claude Code spends thousands of tokens navigating large codebases — repeating Glob → Grep → Read cycles every session. code-brain solves this by:
 
-1. **Building an AST index** — tree-sitter parses your code into a SQLite database of symbols (classes, functions, methods) with exact file:line locations
+1. **Building an AST index** — tree-sitter parses code → SQLite with 50K+ symbols (file:line lookup <5ms)
 2. **Generating a wiki** — structured markdown pages per module (purpose, key files, dependencies, gotchas)
 3. **Serving MCP tools** — Claude Code queries the index directly instead of scanning files
-4. **Activity memory** — Claude remembers what it did across sessions (7-day retention)
+4. **Remembering across sessions** — 7-day activity log with reflection capture (WHY it worked/failed)
+5. **Learning from history** — extract patterns from git commits + consolidate activity into reusable patterns
+6. **Visualizing dependencies** — interactive HTML graph of module relationships
 
 Result: **~97% reduction in navigation tokens** (measured on a 545K LOC codebase).
 
@@ -19,26 +23,126 @@ Result: **~97% reduction in navigation tokens** (measured on a 545K LOC codebase
 
 | Step | Token cost | Time | Required? |
 |------|-----------|------|-----------|
-| `code-brain build` | **0** (runs locally) | ~15-60s | Yes |
-| `code-brain graph` | **0** (runs locally) | ~2s | Optional |
-| `claude mcp add` | **0** (config only) | ~5s | Yes |
-| `/code-brain` (LLM enrich) | **~50-200K tokens** (one-time) | ~10-30 min | Optional |
-| `/code-brain update` | **~5-20K tokens** (stale only) | ~2-5 min | Optional |
-| Daily usage (MCP tools) | **~200-500 tokens/query** | <1s | Automatic |
+| `code-brain build` | 0 (local) | ~15-60s | Yes |
+| `code-brain graph` | 0 (local) | ~2s | Optional |
+| `code-brain extract-patterns` | 0 (local) | ~5-15s | Optional |
+| `code-brain consolidate` | 0 (local) | ~2-5s | Optional |
+| `claude mcp add` | 0 (config) | ~5s | Yes |
+| `/code-brain` (LLM enrich) | ~50-200K tokens (one-time) | ~10-30 min | Optional |
+| Daily MCP usage | ~200-500 tokens/query | <1s | Automatic |
 
-> **Note:** The `build` command (AST index + wiki skeleton) is **completely free** — it runs locally with tree-sitter, no LLM calls. The `/code-brain` skill (LLM enrichment) uses Claude tokens to read code and write wiki pages — this is optional but recommended for best results. You only need to run it once; updates are incremental.
+> **Note:** `build`, `graph`, `extract-patterns`, `consolidate` are all **free** (run locally). Only `/code-brain` (LLM enrichment) uses Claude tokens — it's optional but recommended for best wiki quality.
+
+---
 
 ## Quick Start (TL;DR)
 
 ```bash
-pnpm add -D code-brain          # install (auto-setup CLAUDE.md + skill)
-npx code-brain init              # create config
-npx code-brain build             # build index + wiki skeleton (FREE, ~15s)
-claude mcp add code-brain -- npx code-brain serve   # connect MCP
+pnpm add -D code-brain                              # install (auto-setup CLAUDE.md + skill)
+npx code-brain init                                 # create config
+npx code-brain build                                # build index + wiki skeleton (FREE, ~15s)
+claude mcp add code-brain -- npx code-brain serve   # connect MCP tools to Claude Code
 # Optional: /code-brain in Claude Code to enrich wiki with LLM (~100K tokens)
 ```
 
-**That's it.** New Claude Code sessions auto-use the wiki + index + MCP tools.
+That's it. New Claude Code sessions auto-use the wiki + index + MCP tools.
+
+---
+
+## Features
+
+### 1. AST Index
+
+tree-sitter parses all source files → SQLite database with exact file:line locations.
+
+**Supported languages:**
+
+| Language | Parser | Extensions |
+|----------|--------|-----------|
+| TypeScript | tree-sitter-typescript | .ts, .tsx |
+| JavaScript | tree-sitter-javascript | .js, .jsx |
+| PHP | tree-sitter-php | .php (+ custom via config) |
+| Python | tree-sitter-python | .py |
+| Go | tree-sitter-go | .go |
+| Rust | tree-sitter-rust | .rs |
+| Java | tree-sitter-java | .java |
+
+**Extracts:** classes, interfaces, methods, functions, type aliases, enums, traits, structs.
+
+**Storage:** sql.js (pure JavaScript SQLite, no native builds).
+
+### 2. LLM Wiki
+
+Structured markdown pages per module, generated in 2 phases:
+- **Skeleton** (free, deterministic) — file lists, symbols, dependencies from AST
+- **Enrichment** (optional, LLM) — purpose, gotchas, common tasks via `/code-brain` skill
+
+Wiki lives in `wiki/` directory, git-committed so teams share knowledge.
+
+### 3. MCP Server — 8 Tools
+
+After `claude mcp add code-brain -- npx code-brain serve`:
+
+| Tool | Purpose |
+|------|---------|
+| `code_brain_search` | Fuzzy search symbols + modules (optional `module`, `kind` filters) |
+| `code_brain_module` | Get module summary (purpose, key files, dependencies, gotchas) |
+| `code_brain_symbol` | Exact symbol → file:line + signature |
+| `code_brain_relations` | Module dependency graph (filter by `kind`) |
+| `code_brain_file_symbols` | All symbols in a file |
+| `code_brain_recent_activity` | Past 7 days of activity (filter by `module`, `failures_only`) |
+| `code_brain_activity_log` | Log work with reflection (WHY it worked/failed) |
+| `code_brain_patterns` | Query consolidated patterns (filter by module, min success rate) |
+
+### 4. Activity Memory
+
+Claude remembers what it did across sessions. 7-day retention, lazy recall.
+
+**What's stored:**
+- `action_type` — implement, fix, research, refactor, debug, review, decision
+- `summary` — what was done
+- `files_changed`, `modules_affected`
+- `outcome` — done, partial, abandoned, blocked
+- `reflection` — WHY it worked/failed (the insight)
+- `attempt_history` — approaches tried: `["❌ Tried X", "✅ Used Y"]`
+- `conditions_failed` — what blocked it
+
+**Lazy recall:** not auto-loaded. Claude queries only when needed (~500-3500 tokens only if relevant).
+
+**Auto-cleanup:** entries > `memory.retentionDays` removed on build or MCP start.
+
+**Manual clear:** `npx code-brain clear-memory`
+
+### 5. Dependency Graph
+
+`npx code-brain graph` generates an interactive HTML graph:
+- Click module → see symbols, files, purpose, relationships
+- Click relation tag → navigate to that module
+- Press `/` → search modules
+- Drag/zoom, highlighted connections
+- Typed relationships: `depends_on` (solid), `extends` (dashed red), `implements` (dashed blue)
+
+### 6. Pattern Learning
+
+**Git mining** (`code-brain extract-patterns`):
+- Scans git log for commits with keywords "fix", "bug", "refactor", "feature"
+- Categorizes + infers module from changed files
+- Imports into activity log as historical context
+
+**Consolidation** (`code-brain consolidate`):
+- Groups activity entries by `(action_type + modules + outcome)`
+- Computes success rate across all historical entries
+- Stores in `patterns` table (semantic memory)
+- Queryable via `code_brain_patterns` MCP tool
+
+### 7. Typed Relations
+
+Module dependencies are classified:
+- `depends_on` — import/require statements
+- `extends` — class inheritance
+- `implements` — interface implementation
+
+---
 
 ## Detailed Setup
 
@@ -46,13 +150,12 @@ claude mcp add code-brain -- npx code-brain serve   # connect MCP
 
 ```bash
 pnpm add -D code-brain
-# or
-npm install -D code-brain
 ```
 
-This automatically:
-- Copies the `/code-brain` skill to `.claude/skills/code-brain/`
-- Adds wiki instructions to your `CLAUDE.md`
+Postinstall automatically:
+- Copies `/code-brain` skill to `.claude/skills/code-brain/`
+- Appends wiki instructions to `CLAUDE.md` (with `<!-- code-brain-auto-inserted -->` marker)
+- Prints next-step guidance
 
 ### Step 2: Configure
 
@@ -60,360 +163,187 @@ This automatically:
 npx code-brain init
 ```
 
-Edit `code-brain.config.json` to match your project:
-
+Default config:
 ```json
 {
   "name": "my-project",
   "source": {
     "dirs": ["src/"],
     "extensions": {
-      ".ts": "typescript",
-      ".tsx": "typescript",
-      ".js": "javascript",
-      ".php": "php"
+      ".ts": "typescript", ".tsx": "typescript",
+      ".js": "javascript", ".jsx": "javascript",
+      ".php": "php",
+      ".py": "python",
+      ".go": "go",
+      ".rs": "rust",
+      ".java": "java"
     },
     "exclude": ["node_modules", "vendor", ".git", "dist", "build"]
   },
-  "wiki": {
-    "dir": "wiki/",
-    "maxLinesPerPage": 200
-  },
-  "index": {
-    "path": ".code-brain/index.db"
-  }
+  "wiki": { "dir": "wiki/", "maxLinesPerPage": 200 },
+  "index": { "path": ".code-brain/index.db" },
+  "memory": { "retentionDays": 7 },
+  "mcp": { "autoConfig": true }
 }
 ```
 
-**Common configs:**
-
-<details>
-<summary>TypeScript/JavaScript project (React, Next.js, Node.js)</summary>
-
-```json
-{
-  "name": "my-app",
-  "source": {
-    "dirs": ["src/", "lib/", "app/"],
-    "extensions": { ".ts": "typescript", ".tsx": "typescript", ".js": "javascript", ".jsx": "javascript" },
-    "exclude": ["node_modules", ".git", "dist", "build", ".next", "coverage"]
-  }
-}
-```
-</details>
-
-<details>
-<summary>PHP project (Laravel, Symfony)</summary>
-
-```json
-{
-  "name": "my-php-app",
-  "source": {
-    "dirs": ["app/", "src/"],
-    "extensions": { ".php": "php" },
-    "exclude": ["vendor", ".git", "storage", "bootstrap/cache"]
-  }
-}
-```
-</details>
-
-<details>
-<summary>Full-stack monorepo</summary>
-
-```json
-{
-  "name": "my-monorepo",
-  "source": {
-    "dirs": ["packages/", "apps/", "libs/"],
-    "extensions": { ".ts": "typescript", ".tsx": "typescript", ".js": "javascript", ".php": "php" },
-    "exclude": ["node_modules", "vendor", ".git", "dist", "build"]
-  }
-}
-```
-</details>
-
-### Step 3: Build index + wiki
+### Step 3: Build
 
 ```bash
 npx code-brain build
 ```
 
-Output:
+Output on a large codebase (enterprise codebase, 545K LOC):
 ```
-code-brain: Building index for my-project
-Step 1: Scanning modules...    → 45 modules found
-Step 2: Parsing source files... → 12,000 files, 50,000 symbols
-Step 3: Resolving dependencies...
+Step 1: Scanning modules...    → 145 modules found
+Step 2: Parsing source files... → 7,232 files, 49,088 symbols
+Step 3: Resolving dependencies... → 1,164 relations (depends_on, extends, implements)
 Step 4: Importing wiki data...
-
-code-brain: Done in 15s
-  Index: .code-brain/index.db (15MB)
-  Wiki: 45 module pages at wiki/
+code-brain: Done in 46s
+  Index: .code-brain/index.db (43MB)
 ```
 
-### Step 3b: Visualize dependencies (optional)
+### Step 4: Visualize (optional)
 
 ```bash
 npx code-brain graph
 ```
 
-Opens an interactive graph in your browser:
+Opens interactive HTML graph in browser.
 
-- **Click a module** → see symbols, files, purpose, and all relationships
-- **Click a relationship tag** → navigate to that module
-- **Press `/`** → search modules by name
-- **Drag & zoom** → rearrange the layout
-- **Highlighted connections** — clicking a module dims unrelated nodes
+### Step 5: Extract git patterns (optional)
 
-The graph shows typed relationships: `depends_on` (solid), `extends` (dashed red), `implements` (dashed blue).
+```bash
+npx code-brain extract-patterns --since=30
+```
 
-### Step 4: Connect MCP server to Claude Code
+Mines git history for fix/refactor patterns → imports into activity log.
+
+### Step 6: Connect MCP
 
 ```bash
 claude mcp add code-brain -- npx code-brain serve
 ```
 
-This lets Claude Code use the 7 tools (5 search + 2 memory) directly.
+### Step 7: Enrich wiki with LLM (optional)
 
-### Step 5: Enrich wiki with LLM (optional but recommended)
+> **Token cost:** ~50-200K tokens (one-time). ~$0.30-1.00 depending on plan.
 
-> **Token cost:** This step uses Claude to read your code and write wiki pages.
-> Expect **~50-200K tokens** depending on codebase size (one-time cost).
-> For a 50-module project: ~100K tokens ≈ ~$0.30-1.00 depending on your Claude plan.
-> **You can skip this step** — the AST index + wiki skeleton from `build` already work without LLM enrichment.
+In Claude Code: `/code-brain`
 
-Open Claude Code in your project and run:
+Claude reads code → fills Purpose, Gotchas, Common Tasks in each wiki page.
 
+### Step 8: Consolidate memory (weekly)
+
+```bash
+npx code-brain consolidate --since=30
 ```
-/code-brain
-```
 
-Claude reads your code and enriches each wiki page with:
-- **Purpose** — what the module does (2-3 sentences)
-- **Gotchas** — non-obvious behaviors, legacy quirks
-- **Common Tasks** — how to add/modify features with file paths
+Generalizes recent activity into reusable patterns.
 
-After enrichment, the wiki pages go from skeleton (file lists only) to rich documentation. This is a **one-time investment** — subsequent updates only re-enrich changed modules.
-
-### Step 6: Commit wiki to git
+### Step 9: Commit to git
 
 ```bash
 git add wiki/ .claude/skills/code-brain/ code-brain.config.json CLAUDE.md
 git commit -m "Add code-brain wiki + index config"
 ```
 
-Add `.code-brain/` to `.gitignore` (index is built locally).
+Add `.code-brain/` to `.gitignore` (index built locally per-dev).
 
-Now every team member gets the wiki via `git pull`, and can build their own index with `npx code-brain build`.
+---
 
-## How Claude Code Uses It
+## How Claude Uses It
 
 ### Without code-brain
+
 ```
 User: "Fix the auth middleware bug"
-Claude Code:
-  Glob("**/auth*")           → 50 results         ~3K tokens
-  Grep("middleware")         → 30 matches          ~2K tokens
-  Read(file1.ts)             → 500 lines           ~3K tokens
-  Read(file2.ts)             → 300 lines           ~2K tokens
-  Read(file3.ts)             → 200 lines           ~1.5K tokens
-  ... repeat until found ...
-  Total navigation:                                ~15K tokens
+Claude:
+  Glob("**/auth*")    → 50 results         ~3K tokens
+  Grep("middleware")  → 30 matches         ~2K tokens
+  Read(file1.ts)      → 500 lines          ~3K tokens
+  Read(file2.ts)      → 300 lines          ~2K tokens
+  ... repeat ...
+  Total: ~15K tokens of navigation
 ```
 
 ### With code-brain
+
 ```
 User: "Fix the auth middleware bug"
-Claude Code:
-  code_brain_symbol("authMiddleware") → file:line           ~200 tokens
-  Read(wiki/modules/auth.md)  → purpose + gotchas   ~1.5K tokens
-  Read(auth.ts:45-80)         → exact function       ~500 tokens
-  Total navigation:                                 ~2K tokens
+Claude:
+  code_brain_recent_activity(module="auth", failures_only=true)
+    → "❌ [Apr 7] Tried WebSocket approach → too complex"
+  code_brain_patterns(module="auth", min_success_rate=0.8)
+    → "✅ Linear backoff + health check (3× used, 100% success)"
+  code_brain_symbol("authMiddleware")
+    → auth.ts:45
+  Read(auth.ts:45-80) → exact function
+  Total: ~2K tokens
 ```
 
-**~85% fewer tokens on navigation.**
+**~85% fewer tokens.** Plus Claude avoids retrying failed approaches.
 
-## MCP Tools Reference
-
-After running `claude mcp add code-brain -- npx code-brain serve`, these tools are available in Claude Code:
-
-| Tool | Input | Returns | Use when |
-|------|-------|---------|----------|
-| `code_brain_search` | `"auth middleware"` | Matching symbols + modules | "Where is X?" |
-| `code_brain_module` | `"auth"` | Purpose, key files, deps, gotchas | "What does module X do?" |
-| `code_brain_symbol` | `"validateToken"` | Exact file:line + signature | "Where is function X?" |
-| `code_brain_relations` | `"auth"` | Dependency graph | "What depends on X?" |
-| `code_brain_file_symbols` | `"auth.ts"` | All symbols in file | "What's in this file?" |
-| `code_brain_recent_activity` | `days=7` | Recent work history | "What was done recently?" |
-| `code_brain_activity_log` | `summary="..."` | Logs action | After implementing/fixing |
-
-### Activity Memory
-
-Claude remembers what it did across sessions (7-day retention). This avoids repeating work or re-trying abandoned approaches.
-
-**Lazy recall** — not auto-loaded every session. Claude queries only when needed:
-
-```
-User: "Continue the notification feature"
-Claude: code_brain_recent_activity(days=7, module="notification")
-→ "✅ [Apr 8] implement: Added POST /subscribe endpoint (notification)
-   ❌ [Apr 7] research: Tried WebSocket approach → abandoned (too complex)"
-Claude: Knows to skip WebSocket, continue from /subscribe.
-```
-
-**Auto-log** — Claude logs after significant work:
-```
-Claude finishes fixing a bug →
-  code_brain_activity_log(
-    action_type="fix",
-    summary="Fixed ACL cache not flushing in schedule module",
-    modules_affected=["schedule"],
-    outcome="done"
-  )
-```
-
-Token cost: ~50 tokens per log entry, ~500-3500 tokens per recall (only when needed).
-
-### Memory Configuration
-
-```json
-// code-brain.config.json
-{
-  "memory": {
-    "retentionDays": 7    // default: 7 days. Set 0 to disable.
-  }
-}
-```
-
-### Memory Storage
-
-Activity log lives in the same SQLite file as the code index:
-
-```
-.code-brain/index.db
-├── symbols          ← AST symbols (50K+)
-├── modules          ← wiki module data
-├── relations        ← module dependencies
-├── meta             ← build metadata
-└── activity_log     ← session memory (auto-cleaned)
-```
-
-Each entry stores:
-| Field | Description | Example |
-|-------|-------------|---------|
-| `timestamp` | When (auto-set) | `2026-04-11T08:30:00` |
-| `action_type` | What kind | `implement`, `fix`, `research`, `refactor`, `debug`, `review`, `decision` |
-| `summary` | What was done | `"Added POST /subscribe endpoint"` |
-| `files_changed` | Files modified | `["Routes.ts", "Subscribe.ts"]` |
-| `modules_affected` | Modules involved | `["notification"]` |
-| `outcome` | Result | `done`, `partial`, `abandoned`, `blocked` |
-| `details` | Why/context | `"Tried WebSocket first, too complex"` |
-
-### Memory Lifecycle
-
-```
-Write (during session):
-  Claude calls code_brain_activity_log → INSERT into activity_log → saved to disk
-
-Read (when needed):
-  Claude calls code_brain_recent_activity → SELECT from activity_log → returns formatted list
-
-Auto-cleanup (on build or MCP start):
-  DELETE FROM activity_log WHERE timestamp > retentionDays
-
-Manual clear:
-  npx code-brain clear-memory → DELETE all entries
-
-Rebuild safety:
-  code-brain build clears symbols/modules/relations but PRESERVES activity_log
-```
-
-### When Claude Recalls vs Skips
-
-| Situation | Recalls memory? | Why |
-|-----------|----------------|-----|
-| "Continue the feature from yesterday" | ✅ Yes | Needs context of previous work |
-| "Fix bug in schedule module" | ✅ Yes | Check if similar fix was done recently |
-| "Explain how this function works" | ❌ No | Just reading code, no history needed |
-| "Refactor auth middleware" | ✅ Yes | Check if anyone tried this before |
-| "What time is it?" | ❌ No | Unrelated to codebase work |
-
-This is **lazy recall** — memory is NOT loaded automatically. Claude only queries when it judges the context would be useful. This saves ~3.5K tokens per session when memory isn't needed.
+---
 
 ## CLI Reference
 
 ```bash
-code-brain build [path]    # Parse codebase → index + wiki skeleton
-code-brain graph [path]    # Generate interactive dependency graph (opens browser)
-code-brain serve           # Start MCP server (stdio, for Claude Code)
-code-brain lint            # Check wiki for dead refs + unenriched pages
-code-brain init            # Create code-brain.config.json template
-code-brain help            # Show help
+code-brain build [path]                   # Parse codebase → AST index + wiki skeleton
+code-brain graph [path]                   # Generate interactive dependency graph
+code-brain extract-patterns [--since=N]   # Mine git commits for fix/refactor patterns
+code-brain consolidate [--since=N]        # Generalize activity log → patterns library
+code-brain serve                          # Start MCP server (stdio, for Claude Code)
+code-brain lint                           # Check wiki for dead refs + unenriched pages
+code-brain clear-memory                   # Delete all activity memory entries
+code-brain init                           # Create code-brain.config.json template
+code-brain help                           # Show help
 ```
 
-## Updating
+---
 
-When your code changes significantly:
+## Data Storage
 
-```bash
-# Rebuild index (fast, ~15 seconds)
-npx code-brain build
-
-# Or in Claude Code — rebuild + re-enrich stale wiki pages
-/code-brain update
-```
-
-## Wiki Structure
-
-After build, your project will have:
+All data in **one SQLite file** (`.code-brain/index.db`):
 
 ```
-wiki/
-├── index.md          ← Entry point (Claude reads this first)
-├── README.md         ← Wiki conventions
-├── modules/          ← One page per module
-│   ├── auth.md
-│   ├── api.md
-│   ├── database.md
-│   └── ...
-├── templates/        ← Page templates (used by /code-brain skill)
-├── patterns/         ← Coding patterns (filled by /code-brain)
-├── entities/         ← Domain entities (filled by /code-brain)
-└── guides/           ← Developer guides (filled by /code-brain)
+index.db
+├── symbols          ← AST symbols (file, line, signature, module)
+├── modules          ← wiki module data (purpose, dependencies, gotchas)
+├── relations        ← typed module dependencies
+├── meta             ← build metadata
+├── activity_log     ← session memory (reflection, attempts, outcomes)
+└── patterns         ← consolidated patterns (success rate, frequency)
 ```
 
-Each module page contains:
-- **Purpose** — what it does
-- **Key Files** — most important files with paths
-- **Class Structure** — classes and interfaces from AST
-- **Dependencies** — what it depends on and who depends on it
-- **Gotchas** — non-obvious behaviors
-- **Common Tasks** — how-to with file paths
+Pure sql.js (no native builds). Portable, gitignored, rebuild anytime.
 
-## Language Support
+---
 
-| Language | Parser | Extensions | Status |
-|----------|--------|-----------|--------|
-| TypeScript | tree-sitter-typescript | .ts, .tsx | ✅ Stable |
-| JavaScript | tree-sitter-javascript | .js, .jsx | ✅ Stable |
-| PHP | tree-sitter-php | .php | ✅ Stable |
-| Python | tree-sitter-python | .py | ✅ Stable |
-| Go | tree-sitter-go | .go | ✅ Stable |
-| Rust | tree-sitter-rust | .rs | ✅ Stable |
-| Java | tree-sitter-java | .java | ✅ Stable |
+## Memory Lifecycle
 
-Custom file extensions can be mapped in `code-brain.config.json`:
-```json
-{
-  "source": {
-    "extensions": {
-      ".csp": "php",
-      ".mjs": "javascript",
-      ".kt": "java"
-    }
-  }
-}
 ```
+Write (during session):
+  Claude → code_brain_activity_log(reflection, attempts, ...) → INSERT → saved to disk
+
+Read (lazy):
+  Claude → code_brain_recent_activity(failures_only=true) → SELECT
+                                                            ORDER BY outcome, timestamp
+
+Git mining (on-demand):
+  code-brain extract-patterns → git log → categorize → INSERT into activity_log
+
+Consolidation (weekly):
+  code-brain consolidate → GROUP BY (type+modules+outcome) → INSERT into patterns
+
+Auto-cleanup (on build or MCP start):
+  DELETE FROM activity_log WHERE timestamp < memory.retentionDays
+
+Manual clear:
+  code-brain clear-memory → DELETE all entries
+```
+
+---
 
 ## Team Workflow
 
@@ -422,83 +352,74 @@ Developer A:                     Developer B:
   pnpm add -D code-brain          git pull
   code-brain init                  (gets wiki/ + config + skill)
   code-brain build                 code-brain build
-  /code-brain (enrich wiki)        (wiki already enriched by A)
+  /code-brain (enrich wiki)        (wiki already enriched)
   git commit wiki/                 Start using Claude Code
-                                   → wiki + MCP tools ready
+                                   → wiki + MCP + memory ready
 ```
 
-**Key: wiki is git-committed, index is built locally.** Team shares knowledge via git, each dev builds their own index.
+**Key principle:** wiki is git-committed, index is built locally.
 
-## How It Works (Technical)
-
-```
-code-brain build
-  │
-  ├─ Module Scanner
-  │   Scan source.dirs → discover top-level subdirectories as modules
-  │
-  ├─ AST Parser (tree-sitter)
-  │   For each source file:
-  │     Parse AST → extract classes, functions, methods, interfaces
-  │     Store in SQLite: name, kind, file, line_start, signature, module
-  │
-  ├─ Dependency Resolver
-  │   Scan import/require statements → build module dependency graph
-  │
-  ├─ Wiki Skeleton Generator
-  │   For each module:
-  │     Generate markdown page with file lists, symbols, dependencies
-  │     (Purpose/Gotchas left empty for LLM enrichment)
-  │
-  └─ Output
-      .code-brain/index.db  (SQLite: symbols + modules + relations)
-      wiki/                 (Markdown: one page per module)
-```
+---
 
 ## Benchmarks
 
-Tested on a 545K LOC enterprise monorepo (PHP + TypeScript):
+Tested on a 545K LOC enterprise monorepo:
 
 | Metric | Value |
 |--------|-------|
-| Source files parsed | 7,232 |
-| Symbols extracted | 49,697 |
+| Files parsed | 7,232 |
+| Symbols extracted | 49,088 |
 | Modules discovered | 145 |
-| Build time | 14.7 seconds |
-| Index size | 15.5 MB |
+| Relations (typed) | 1,164 (depends_on + extends + implements) |
+| Git patterns extracted | 452 (from 30 days) |
+| Consolidated patterns | 66 |
+| Build time | 46 seconds |
+| Index size | 43 MB |
 | Token savings (wiki only) | 69% |
 | Token savings (wiki + index) | 97% |
+
+---
 
 ## Troubleshooting
 
 ### `tree-sitter` build fails
 
-tree-sitter requires native compilation. If `pnpm install` shows warnings:
-
 ```bash
-pnpm approve-builds    # approve native builds
-pnpm rebuild tree-sitter tree-sitter-php tree-sitter-typescript tree-sitter-javascript
+pnpm approve-builds
+pnpm rebuild tree-sitter tree-sitter-php tree-sitter-typescript tree-sitter-javascript tree-sitter-python tree-sitter-go tree-sitter-rust tree-sitter-java
 ```
 
 ### 0 symbols after build
 
-Check your `code-brain.config.json`:
-- `source.dirs` must point to directories that exist
-- `source.extensions` must include your file types
-- Run `code-brain build` with a path argument: `code-brain build /path/to/project`
+- Check `source.dirs` exists in `code-brain.config.json`
+- Check `source.extensions` matches your file types
+- Run with explicit path: `code-brain build /path/to/project`
 
 ### MCP server not connecting
 
 ```bash
-# Verify server starts
-npx code-brain serve
-# Should print: "code-brain MCP server started"
-
-# Re-add to Claude Code
+npx code-brain serve                           # Should print "code-brain MCP server started"
 claude mcp remove code-brain
 claude mcp add code-brain -- npx code-brain serve
 # Restart Claude Code session
 ```
+
+### Rebuild doesn't pick up new code
+
+The build intentionally clears symbols/modules/relations but **preserves activity_log + patterns**. Run:
+```bash
+npx code-brain build
+```
+
+### Memory grows too large
+
+```bash
+npx code-brain clear-memory          # Delete all entries
+# Or change retention in config:
+#   "memory": { "retentionDays": 3 }
+```
+
+---
 
 ## License
 
