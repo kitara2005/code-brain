@@ -18,6 +18,10 @@
     "url": "https://github.com/kitara2005/code-brain.git"
   },
   "homepage": "https://github.com/kitara2005/code-brain#readme",
+  "publishConfig": {
+    "registry": "https://registry.npmjs.org",
+    "access": "public"
+  },
   "files": [
     "dist/",
     "bin/",
