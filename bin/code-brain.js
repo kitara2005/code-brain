@@ -14,7 +14,9 @@ import { existsSync, readdirSync, readFileSync } from "node:fs";
 
 const args = process.argv.slice(2);
 const command = args[0] || "help";
-const projectRoot = resolve(args[1] || process.cwd());
+// First non-flag arg is projectRoot, else CWD
+const positionalPath = args.slice(1).find(a => !a.startsWith("--"));
+const projectRoot = resolve(positionalPath || process.cwd());
 
 switch (command) {
   case "build": {
@@ -102,6 +104,41 @@ switch (command) {
     break;
   }
 
+  case "extract-patterns": {
+    const { openDb, saveDb } = await import("../dist/db.js");
+    const { loadConfig } = await import("../dist/config.js");
+    const { initSchema } = await import("../dist/schema.js");
+    const { extractGitPatterns, importPatternsToActivity } = await import("../dist/memory/git-pattern-extractor.js");
+    const config = loadConfig(projectRoot);
+    const dbFile = resolve(projectRoot, config.index.path);
+    const days = parseInt(args.find(a => a.startsWith("--since="))?.split("=")[1] || "7", 10);
+    const db = await openDb(dbFile);
+    initSchema(db);
+    const patterns = extractGitPatterns(projectRoot, days);
+    const imported = importPatternsToActivity(db, patterns);
+    saveDb(db, dbFile);
+    db.close();
+    console.log(`Extracted ${patterns.length} patterns from git, imported ${imported} into activity log.`);
+    break;
+  }
+
+  case "consolidate": {
+    const { openDb, saveDb } = await import("../dist/db.js");
+    const { loadConfig } = await import("../dist/config.js");
+    const { initSchema } = await import("../dist/schema.js");
+    const { consolidateActivity } = await import("../dist/memory/consolidation.js");
+    const config = loadConfig(projectRoot);
+    const dbFile = resolve(projectRoot, config.index.path);
+    const days = parseInt(args.find(a => a.startsWith("--since="))?.split("=")[1] || "30", 10);
+    const db = await openDb(dbFile);
+    initSchema(db);
+    const count = consolidateActivity(db, days);
+    saveDb(db, dbFile);
+    db.close();
+    console.log(`Consolidated ${count} patterns from last ${days} days of activity.`);
+    break;
+  }
+
   case "clear-memory": {
     const { openDb, saveDb } = await import("../dist/db.js");
     const { loadConfig } = await import("../dist/config.js");
@@ -127,13 +164,15 @@ switch (command) {
 code-brain — Turn any codebase into searchable knowledge for Claude Code
 
 Usage:
-  code-brain build [path]    Parse codebase → AST index + wiki skeleton
-  code-brain graph [path]    Generate interactive dependency graph (opens browser)
-  code-brain serve           Start MCP server (7 tools: 5 search + 2 memory, stdio)
-  code-brain lint            Check wiki for dead refs and unenriched pages
-  code-brain clear-memory    Delete all activity memory entries
-  code-brain init            Create code-brain.config.json template
-  code-brain help            Show this help
+  code-brain build [path]              Parse codebase → AST index + wiki skeleton
+  code-brain graph [path]              Generate interactive dependency graph (opens browser)
+  code-brain serve                     Start MCP server (8 tools, stdio)
+  code-brain lint                      Check wiki for dead refs and unenriched pages
+  code-brain extract-patterns [--since=7] Mine git commits for fix/refactor patterns
+  code-brain consolidate [--since=30]  Generalize activity log → patterns library
+  code-brain clear-memory              Delete all activity memory entries
+  code-brain init                      Create code-brain.config.json template
+  code-brain help                      Show this help
 
 Workflow:
   1. code-brain init                     Create config

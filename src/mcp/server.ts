@@ -132,20 +132,23 @@ server.tool(
 // --- Tool 6: code_brain_activity_log (write) ---
 server.tool(
   "code_brain_activity_log",
-  "Log what you just did. Call after implementing features, fixing bugs, or making key decisions. Helps future sessions avoid repeating work.",
+  "Log what you just did. Call after implementing features, fixing bugs, or making key decisions. Capture reflection (WHY) not just what — helps future sessions avoid repeating failed approaches.",
   {
     action_type: z.enum(["implement", "fix", "research", "refactor", "debug", "review", "decision"]).describe("Type of action"),
-    summary: z.string().describe("1-2 sentences: what was done and why"),
+    summary: z.string().describe("1-2 sentences: what was done"),
     files_changed: z.array(z.string()).optional().describe("Files modified"),
     modules_affected: z.array(z.string()).optional().describe("Modules involved"),
     outcome: z.enum(["done", "partial", "abandoned", "blocked"]).optional().default("done"),
-    details: z.string().optional().describe("Longer context: decisions made, approaches tried, why abandoned"),
+    details: z.string().optional().describe("Longer context"),
+    reflection: z.string().optional().describe("WHY this worked or failed — the insight future sessions need"),
+    attempt_history: z.array(z.string()).optional().describe("Approaches tried: ['❌ Tried X because Y', '✅ Used Z instead']"),
+    conditions_failed: z.string().optional().describe("If abandoned/blocked: what was the blocker?"),
   },
-  async ({ action_type, summary, files_changed, modules_affected, outcome, details }) => {
+  async ({ action_type, summary, files_changed, modules_affected, outcome, details, reflection, attempt_history, conditions_failed }) => {
     try {
       const stmt = db.prepare(
-        `INSERT INTO activity_log (action_type, summary, files_changed, modules_affected, outcome, details)
-         VALUES (?, ?, ?, ?, ?, ?)`
+        `INSERT INTO activity_log (action_type, summary, files_changed, modules_affected, outcome, details, reflection, attempt_history, conditions_failed)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
       );
       stmt.bind([
         action_type, summary,
@@ -153,13 +156,15 @@ server.tool(
         modules_affected ? JSON.stringify(modules_affected) : null,
         outcome || "done",
         details || null,
+        reflection || null,
+        attempt_history ? JSON.stringify(attempt_history) : null,
+        conditions_failed || null,
       ]);
       stmt.step();
       stmt.free();
-      // Persist to disk
       const { saveDb } = await import("../db.js");
       saveDb(db, indexPath);
-      return { content: [{ type: "text" as const, text: `Logged: [${action_type}] ${summary}` }] };
+      return { content: [{ type: "text" as const, text: `Logged: [${action_type}] ${summary}${reflection ? " (with reflection)" : ""}` }] };
     } catch (e) {
       console.error("activity_log error:", e);
       return { content: [{ type: "text" as const, text: "Failed to log activity." }] };
@@ -173,10 +178,12 @@ server.tool(
   "Get recent activity log. Use when you need context about what was done recently — avoid repeating completed work or re-trying abandoned approaches.",
   {
     days: z.number().optional().default(7).describe("How many days back to look"),
-    action_type: z.string().optional().describe("Filter by type: implement, fix, research, etc."),
+    action_type: z.string().optional().describe("Filter: implement, fix, research, refactor, debug, review, decision"),
     module: z.string().optional().describe("Filter by module name"),
+    outcome: z.string().optional().describe("Filter: done, partial, abandoned, blocked. Use 'abandoned,blocked' to see only failures (prevent retry)"),
+    failures_only: z.boolean().optional().describe("Shortcut: only show abandoned/blocked entries to avoid retrying"),
   },
-  async ({ days, action_type, module }) => {
+  async ({ days, action_type, module, outcome, failures_only }) => {
     try {
       const conditions = [`timestamp > datetime('now', '-${days} days')`];
       const params: any[] = [];
@@ -184,10 +191,21 @@ server.tool(
       if (action_type) { conditions.push("action_type = ?"); params.push(action_type); }
       if (module) { conditions.push("modules_affected LIKE ?"); params.push(`%${module}%`); }
 
+      if (failures_only) {
+        conditions.push("outcome IN ('abandoned', 'blocked')");
+      } else if (outcome) {
+        const outcomes = outcome.split(",").map(s => s.trim());
+        const placeholders = outcomes.map(() => "?").join(",");
+        conditions.push(`outcome IN (${placeholders})`);
+        params.push(...outcomes);
+      }
+
       const rows = query(
-        `SELECT timestamp, action_type, summary, modules_affected, outcome, details
+        `SELECT timestamp, action_type, summary, modules_affected, outcome, details, reflection, attempt_history, conditions_failed
          FROM activity_log WHERE ${conditions.join(" AND ")}
-         ORDER BY timestamp DESC LIMIT 50`,
+         ORDER BY
+           CASE outcome WHEN 'abandoned' THEN 0 WHEN 'blocked' THEN 1 ELSE 2 END,
+           timestamp DESC LIMIT 50`,
         params
       );
 
@@ -200,8 +218,17 @@ server.tool(
         const date = (r.timestamp as string).split("T")[0] || r.timestamp;
         const icon = outcomeIcon[r.outcome] || "•";
         const mods = r.modules_affected ? ` (${r.modules_affected})` : "";
-        const detail = r.details ? `\n     ↳ ${r.details}` : "";
-        return `${icon} [${date}] ${r.action_type}: ${r.summary}${mods}${detail}`;
+        let block = `${icon} [${date}] ${r.action_type}: ${r.summary}${mods}`;
+        if (r.reflection) block += `\n     💡 ${r.reflection}`;
+        if (r.conditions_failed) block += `\n     ⚠️  Blocked: ${r.conditions_failed}`;
+        if (r.attempt_history) {
+          try {
+            const attempts = JSON.parse(r.attempt_history);
+            if (attempts.length) block += `\n     ${attempts.join("\n     ")}`;
+          } catch {}
+        }
+        if (r.details && !r.reflection) block += `\n     ↳ ${r.details}`;
+        return block;
       });
 
       return { content: [{ type: "text" as const, text: `Recent activity (${days} days):\n${lines.join("\n")}` }] };
@@ -217,6 +244,49 @@ function formatSymbols(rows: any[]): string {
     `[${r.kind}] ${r.scope ? `${r.scope}::` : ""}${r.name} — ${r.file}:${r.line_start}${r.signature ? ` ${r.signature}` : ""}${r.module ? ` (${r.module})` : ""}`
   ).join("\n");
 }
+
+// --- Tool 8: code_brain_patterns (read consolidated patterns) ---
+server.tool(
+  "code_brain_patterns",
+  "Query consolidated patterns from past work. Patterns are generalized from activity log via 'code-brain consolidate'. Use when looking for recurring solutions.",
+  {
+    module: z.string().optional().describe("Filter by module"),
+    category: z.string().optional().describe("Filter by action_type (fix, implement, refactor, etc.)"),
+    min_success_rate: z.number().optional().describe("Only show patterns with success rate >= this (0-1)"),
+  },
+  async ({ module, category, min_success_rate }) => {
+    try {
+      const conditions: string[] = [];
+      const params: any[] = [];
+      if (module) { conditions.push("modules LIKE ?"); params.push(`%${module}%`); }
+      if (category) { conditions.push("category = ?"); params.push(category); }
+      if (min_success_rate !== undefined) { conditions.push("success_rate >= ?"); params.push(min_success_rate); }
+
+      const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
+      const rows = query(
+        `SELECT name, category, modules, approach, gotchas, success_rate, times_used, last_used
+         FROM patterns ${where}
+         ORDER BY success_rate DESC, times_used DESC LIMIT 20`,
+        params
+      );
+
+      if (rows.length === 0) {
+        return { content: [{ type: "text" as const, text: "No patterns found. Run: code-brain consolidate" }] };
+      }
+
+      const lines = rows.map((r: any) => {
+        const rate = Math.round((r.success_rate || 0) * 100);
+        const date = (r.last_used as string).split("T")[0];
+        return `📋 ${r.name} (${rate}% success, ${r.times_used}× used, last: ${date})\n   ${r.approach || ""}${r.gotchas ? `\n   ⚠️  ${r.gotchas}` : ""}`;
+      });
+
+      return { content: [{ type: "text" as const, text: `Patterns:\n${lines.join("\n\n")}` }] };
+    } catch (e) {
+      console.error("patterns error:", e);
+      return { content: [{ type: "text" as const, text: "Failed to read patterns." }] };
+    }
+  }
+);
 
 const transport = new StdioServerTransport();
 await server.connect(transport);

@@ -62,10 +62,37 @@ export function initSchema(db: Database): void {
       files_changed TEXT,
       modules_affected TEXT,
       outcome TEXT DEFAULT 'done',
-      details TEXT
+      details TEXT,
+      reflection TEXT,
+      attempt_history TEXT,
+      conditions_failed TEXT
     )
   `);
   db.run(`CREATE INDEX IF NOT EXISTS idx_activity_time ON activity_log(timestamp)`);
+  db.run(`CREATE INDEX IF NOT EXISTS idx_activity_outcome ON activity_log(outcome)`);
+
+  // Add reflection columns if upgrading from older schema (idempotent)
+  try { db.run(`ALTER TABLE activity_log ADD COLUMN reflection TEXT`); } catch {}
+  try { db.run(`ALTER TABLE activity_log ADD COLUMN attempt_history TEXT`); } catch {}
+  try { db.run(`ALTER TABLE activity_log ADD COLUMN conditions_failed TEXT`); } catch {}
+
+  // Consolidated patterns library (semantic memory)
+  db.run(`
+    CREATE TABLE IF NOT EXISTS patterns (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      category TEXT,
+      modules TEXT,
+      approach TEXT,
+      gotchas TEXT,
+      references_json TEXT,
+      success_rate REAL,
+      times_used INTEGER DEFAULT 1,
+      last_used TEXT DEFAULT (datetime('now'))
+    )
+  `);
+  db.run(`CREATE INDEX IF NOT EXISTS idx_patterns_name ON patterns(name)`);
+  db.run(`CREATE INDEX IF NOT EXISTS idx_patterns_category ON patterns(category)`);
 }
 
 /** Cleanup activity entries older than retentionDays */

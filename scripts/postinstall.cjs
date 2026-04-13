@@ -63,18 +63,27 @@ Read \`wiki/index.md\` first when you need to understand a module, find related 
 
 ### Activity Memory (IMPORTANT)
 
-**Before working on a module**, check recent activity to avoid repeating work:
-\`code_brain_recent_activity(days=7, module="module-name")\`
+**Before working on a module**, check past failures to avoid retry:
+\`code_brain_recent_activity(days=7, module="module-name", failures_only=true)\`
 
-Call this when:
-- User says "continue", "tiếp tục", or references previous work
-- You are about to implement a feature or fix a bug
-- You want to know what approaches were already tried
+Then check successful patterns:
+\`code_brain_patterns(module="module-name", min_success_rate=0.8)\`
 
-**After completing significant work**, log it:
-\`code_brain_activity_log(action_type="implement", summary="what you did", modules_affected=["module"], outcome="done")\`
+**After completing work**, log with REFLECTION (the insight, not just what):
+\`\`\`
+code_brain_activity_log(
+  action_type="fix",
+  summary="Fixed WebSocket reconnection",
+  modules_affected=["chat"],
+  outcome="done",
+  reflection="Exponential backoff too aggressive. Linear + health check works.",
+  attempt_history=["❌ Exponential backoff: users stuck 30s", "✅ Linear + health check: reconnect <5s"]
+)
+\`\`\`
 
-Always log: features done, bugs fixed, approaches abandoned (with details why).
+For abandoned approaches, always set \`conditions_failed\` so future sessions know WHY.
+
+Always log: features done, bugs fixed, approaches abandoned.
 Skip logging: file reads, questions, trivial edits.
 
 ### Maintenance
