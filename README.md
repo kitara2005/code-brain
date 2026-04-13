@@ -2,7 +2,7 @@
 
 Turn any codebase into searchable knowledge for Claude Code.
 
-**LLM Wiki** (compiled module knowledge) + **AST Index** (50K+ symbols, <5ms lookup) + **MCP Server** (5 search tools).
+**AST Index** (50K+ symbols, <5ms lookup) + **LLM Wiki** (compiled module knowledge) + **MCP Server** (7 tools) + **Activity Memory** (7-day recall).
 
 ## Why
 
@@ -11,10 +11,36 @@ Claude Code spends thousands of tokens navigating large codebases — repeating 
 1. **Building an AST index** — tree-sitter parses your code into a SQLite database of symbols (classes, functions, methods) with exact file:line locations
 2. **Generating a wiki** — structured markdown pages per module (purpose, key files, dependencies, gotchas)
 3. **Serving MCP tools** — Claude Code queries the index directly instead of scanning files
+4. **Activity memory** — Claude remembers what it did across sessions (7-day retention)
 
 Result: **~97% reduction in navigation tokens** (measured on a 545K LOC codebase).
 
-## Quick Start
+## Cost Overview
+
+| Step | Token cost | Time | Required? |
+|------|-----------|------|-----------|
+| `code-brain build` | **0** (runs locally) | ~15-60s | Yes |
+| `code-brain graph` | **0** (runs locally) | ~2s | Optional |
+| `claude mcp add` | **0** (config only) | ~5s | Yes |
+| `/code-brain` (LLM enrich) | **~50-200K tokens** (one-time) | ~10-30 min | Optional |
+| `/code-brain update` | **~5-20K tokens** (stale only) | ~2-5 min | Optional |
+| Daily usage (MCP tools) | **~200-500 tokens/query** | <1s | Automatic |
+
+> **Note:** The `build` command (AST index + wiki skeleton) is **completely free** — it runs locally with tree-sitter, no LLM calls. The `/code-brain` skill (LLM enrichment) uses Claude tokens to read code and write wiki pages — this is optional but recommended for best results. You only need to run it once; updates are incremental.
+
+## Quick Start (TL;DR)
+
+```bash
+pnpm add -D code-brain          # install (auto-setup CLAUDE.md + skill)
+npx code-brain init              # create config
+npx code-brain build             # build index + wiki skeleton (FREE, ~15s)
+claude mcp add code-brain -- npx code-brain serve   # connect MCP
+# Optional: /code-brain in Claude Code to enrich wiki with LLM (~100K tokens)
+```
+
+**That's it.** New Claude Code sessions auto-use the wiki + index + MCP tools.
+
+## Detailed Setup
 
 ### Step 1: Install
 
@@ -151,6 +177,11 @@ This lets Claude Code use the 7 tools (5 search + 2 memory) directly.
 
 ### Step 5: Enrich wiki with LLM (optional but recommended)
 
+> **Token cost:** This step uses Claude to read your code and write wiki pages.
+> Expect **~50-200K tokens** depending on codebase size (one-time cost).
+> For a 50-module project: ~100K tokens ≈ ~$0.30-1.00 depending on your Claude plan.
+> **You can skip this step** — the AST index + wiki skeleton from `build` already work without LLM enrichment.
+
 Open Claude Code in your project and run:
 
 ```
@@ -161,6 +192,8 @@ Claude reads your code and enriches each wiki page with:
 - **Purpose** — what the module does (2-3 sentences)
 - **Gotchas** — non-obvious behaviors, legacy quirks
 - **Common Tasks** — how to add/modify features with file paths
+
+After enrichment, the wiki pages go from skeleton (file lists only) to rich documentation. This is a **one-time investment** — subsequent updates only re-enrich changed modules.
 
 ### Step 6: Commit wiki to git
 
