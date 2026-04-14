@@ -57,6 +57,32 @@ const BUILTIN_LANGUAGES: Record<string, LanguageConfig> = {
     queryFiles: ["queries/java-tags.scm"],
     extensions: [".java"],
   },
+  // Phase 5: New languages (parsers are optionalDependencies)
+  csharp: {
+    parserModule: "tree-sitter-c-sharp",
+    queryFiles: ["queries/csharp-tags.scm"],
+    extensions: [".cs"],
+  },
+  swift: {
+    parserModule: "tree-sitter-swift",
+    queryFiles: ["queries/swift-tags.scm"],
+    extensions: [".swift"],
+  },
+  kotlin: {
+    parserModule: "tree-sitter-kotlin",
+    queryFiles: ["queries/kotlin-tags.scm"],
+    extensions: [".kt", ".kts"],
+  },
+  ruby: {
+    parserModule: "tree-sitter-ruby",
+    queryFiles: ["queries/ruby-tags.scm"],
+    extensions: [".rb"],
+  },
+  cpp: {
+    parserModule: "tree-sitter-cpp",
+    queryFiles: ["queries/cpp-tags.scm"],
+    extensions: [".cpp", ".hpp", ".cc", ".h"],
+  },
 };
 
 /** Resolve language config by language key */

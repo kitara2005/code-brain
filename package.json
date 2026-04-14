@@ -45,7 +45,12 @@
     "zod": "^3.24.0"
   },
   "optionalDependencies": {
-    "better-sqlite3": "^11.0.0"
+    "better-sqlite3": "^11.0.0",
+    "tree-sitter-c-sharp": "^0.23.0",
+    "tree-sitter-swift": "^0.6.0",
+    "tree-sitter-kotlin": "^0.3.0",
+    "tree-sitter-ruby": "^0.23.0",
+    "tree-sitter-cpp": "^0.23.0"
   },
   "devDependencies": {
     "@types/better-sqlite3": "^7.6.12",
