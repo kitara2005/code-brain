@@ -117,10 +117,13 @@ export function createBetterSqliteDriver(dbPath: string, readOnly = false): DbDr
         const rows = stmt.all();
         const values = rows.map((r: any) => columns.map((c: string) => r[c]));
         return [{ columns, values }];
-      } catch {
-        // Multi-statement SQL or error — use exec() as fallback
-        db.exec(sql);
-        return [];
+      } catch (e: any) {
+        // Only fall through for multi-statement SQL; re-throw real errors
+        if (e?.message?.includes("more than one statement")) {
+          db.exec(sql);
+          return [];
+        }
+        throw e;
       }
     },
 

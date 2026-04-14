@@ -6,6 +6,7 @@ import type { DbDriver } from "../db/db-driver.js";
 import type { CodeBrainConfig } from "../config.js";
 import { getAllFileMeta, computeHashPrefix } from "./file-meta-tracker.js";
 import { collectFiles } from "./module-scanner.js";
+import { getGitHead } from "./git-utils.js";
 
 export interface ChangeSet {
   changed: string[];   // relative paths to reparse
@@ -26,14 +27,6 @@ export function detectChanges(projectRoot: string, db: DbDriver, config: CodeBra
   return mtimeScan(projectRoot, db, config);
 }
 
-/** Get current git HEAD SHA (or null if not a git repo) */
-function getGitHead(projectRoot: string): string | null {
-  try {
-    return execSync("git rev-parse HEAD", { cwd: projectRoot, encoding: "utf-8" }).trim();
-  } catch {
-    return null;
-  }
-}
 
 /** Get a value from the meta table */
 function getMetaValue(db: DbDriver, key: string): string | null {
@@ -41,6 +34,11 @@ function getMetaValue(db: DbDriver, key: string): string | null {
   const row = stmt.get(key);
   stmt.free();
   return (row as any)?.value ?? null;
+}
+
+/** Validate a string is a git SHA (hex only, 4-40 chars) */
+function isValidSha(s: string): boolean {
+  return /^[0-9a-f]{4,40}$/i.test(s);
 }
 
 /** Git-based change detection: diff-tree for commits + mtime for unstaged */
@@ -54,6 +52,10 @@ function gitBasedDetection(
 
   // 1. Git diff-tree between last build commit and HEAD (with rename detection)
   if (lastCommit !== currentHead) {
+    // Validate SHAs to prevent shell injection from tampered DB
+    if (!isValidSha(lastCommit) || !isValidSha(currentHead)) {
+      return mtimeScan(projectRoot, db, config);
+    }
     try {
       const output = execSync(
         `git diff-tree -M --name-status -r ${lastCommit}..${currentHead}`,

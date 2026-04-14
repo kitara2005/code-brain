@@ -45,16 +45,18 @@ switch (command) {
     const { startWatchMode } = await import("../dist/indexer/watch-mode.js");
     const watchConfig = loadConfig(projectRoot);
     const watchDbPath = resolve(projectRoot, watchConfig.index.path);
-    const watchDb = await openDb(watchDbPath);
-    initSchema(watchDb);
 
-    // Initial build if no index exists
+    // Initial build if no index exists (uses its own DB connection)
     const { statSync } = await import("node:fs");
     if (!existsSync(watchDbPath) || statSync(watchDbPath).size < 100) {
       console.error("No index found, running initial build...");
       process.argv[2] = projectRoot;
       await import("../dist/indexer/index-builder.js");
     }
+
+    // Open DB AFTER initial build completes (single connection)
+    const watchDb = await openDb(watchDbPath);
+    initSchema(watchDb);
 
     const watcher = startWatchMode(projectRoot, watchConfig, watchDb, watchDbPath);
 

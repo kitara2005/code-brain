@@ -41,6 +41,12 @@ export function startWatchMode(
       console.error(`[error] Build failed: ${e instanceof Error ? e.message : e}`);
     }
     building = false;
+
+    // Re-schedule if events arrived during build
+    if (pendingFiles.size > 0) {
+      if (debounceTimer) clearTimeout(debounceTimer);
+      debounceTimer = setTimeout(triggerBuild, 300);
+    }
   };
 
   watcher.on("all", (event, filePath) => {

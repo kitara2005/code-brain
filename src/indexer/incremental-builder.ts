@@ -1,7 +1,6 @@
 /** Incremental build — only reparse changed files instead of full rebuild */
 import path from "node:path";
 import fs from "node:fs";
-import { execSync } from "node:child_process";
 import type { DbDriver } from "../db/db-driver.js";
 import type { CodeBrainConfig } from "../config.js";
 import { detectChanges } from "./change-detector.js";
@@ -11,6 +10,7 @@ import { extractFileSummary, insertFileSummary } from "./file-summarizer.js";
 import { scanModules } from "./module-scanner.js";
 import { resolveDependencies } from "./dependency-resolver.js";
 import { saveDb } from "../db/index.js";
+import { getGitHead } from "./git-utils.js";
 
 export interface IncrementalResult {
   filesChanged: number;
@@ -120,26 +120,31 @@ export function incrementalBuild(
     throw e;
   }
 
-  // 4. Recalculate relations for affected modules only
-  if (affectedModules.size > 0) {
-    const affectedModList = modules.filter(m => affectedModules.has(m.name));
-    if (affectedModList.length > 0) {
-      // Delete old relations for affected modules, then re-resolve
-      for (const mod of affectedModList) {
-        db.run("DELETE FROM relations WHERE source = ? OR target = ?", [mod.name, mod.name]);
-      }
-      const newRelations = resolveDependencies(affectedModList, projectRoot);
-      for (const rel of newRelations) {
-        db.run(
-          "INSERT OR REPLACE INTO relations (source, target, kind, details) VALUES (?, ?, ?, ?)",
-          [rel.source, rel.target, rel.kind, rel.details ?? null],
-        );
+  // 4. Recalculate relations for affected modules + FTS rebuild (in transaction)
+  db.run("BEGIN TRANSACTION");
+  try {
+    if (affectedModules.size > 0) {
+      const affectedModList = modules.filter(m => affectedModules.has(m.name));
+      if (affectedModList.length > 0) {
+        for (const mod of affectedModList) {
+          db.run("DELETE FROM relations WHERE source = ? OR target = ?", [mod.name, mod.name]);
+        }
+        const newRelations = resolveDependencies(affectedModList, projectRoot);
+        for (const rel of newRelations) {
+          db.run(
+            "INSERT OR REPLACE INTO relations (source, target, kind, details) VALUES (?, ?, ?, ?)",
+            [rel.source, rel.target, rel.kind, rel.details ?? null],
+          );
+        }
       }
     }
+    // 5. Rebuild FTS5 index
+    try { db.run("INSERT INTO symbols_fts(symbols_fts) VALUES('rebuild')"); } catch {}
+    db.run("COMMIT");
+  } catch (e) {
+    db.run("ROLLBACK");
+    throw e;
   }
-
-  // 5. Rebuild FTS5 index
-  try { db.run("INSERT INTO symbols_fts(symbols_fts) VALUES('rebuild')"); } catch {}
 
   // 6. Update meta
   const gitHead = getGitHead(projectRoot);
@@ -170,9 +175,3 @@ function findModule(relPath: string, modules: { name: string; path: string }[]):
   return undefined;
 }
 
-/** Get current git HEAD SHA */
-function getGitHead(projectRoot: string): string | null {
-  try {
-    return execSync("git rev-parse HEAD", { cwd: projectRoot, encoding: "utf-8" }).trim();
-  } catch { return null; }
-}

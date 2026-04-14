@@ -2,7 +2,6 @@
 /** Build the code-brain index: full or incremental, scan modules, parse AST, store in SQLite */
 import path from "node:path";
 import fs from "node:fs";
-import { execSync } from "node:child_process";
 import { loadConfig } from "../config.js";
 import { openDb, saveDb } from "../db/index.js";
 import { initSchema, clearIndex, cleanupActivity } from "../schema.js";
@@ -14,6 +13,7 @@ import { upsertFileMeta, computeHashPrefix } from "./file-meta-tracker.js";
 import { incrementalBuild } from "./incremental-builder.js";
 import type { CodeBrainConfig } from "../config.js";
 import type { DbDriver } from "../db/db-driver.js";
+import { getGitHead } from "./git-utils.js";
 
 const projectRoot = process.argv[2] || process.cwd();
 const forceRebuild = process.argv.includes("--force");
@@ -82,6 +82,7 @@ function fullBuild(projectRoot: string, config: CodeBrainConfig, db: DbDriver, d
   `);
 
   db.run("BEGIN TRANSACTION");
+  try {
 
   for (const sourceDir of config.source.dirs) {
     const absDir = path.join(projectRoot, sourceDir);
@@ -105,7 +106,7 @@ function fullBuild(projectRoot: string, config: CodeBrainConfig, db: DbDriver, d
         // Find module
         let moduleName: string | undefined;
         for (const mod of modules) {
-          if (relPath.startsWith(mod.path)) { moduleName = mod.name; break; }
+          if (relPath.startsWith(mod.path + "/")) { moduleName = mod.name; break; }
         }
 
         const symbols = parseFile(source, relPath, language);
@@ -145,6 +146,11 @@ function fullBuild(projectRoot: string, config: CodeBrainConfig, db: DbDriver, d
   }
 
   db.run("COMMIT");
+  } catch (e) {
+    db.run("ROLLBACK");
+    insertSym.free();
+    throw e;
+  }
   insertSym.free();
 
   // Rebuild FTS5 index
@@ -241,9 +247,3 @@ function extractSection(content: string, heading: string): string {
   return (next === -1 ? rest : rest.slice(0, next)).trim();
 }
 
-/** Get current git HEAD SHA */
-function getGitHead(projectRoot: string): string | null {
-  try {
-    return execSync("git rev-parse HEAD", { cwd: projectRoot, encoding: "utf-8" }).trim();
-  } catch { return null; }
-}
