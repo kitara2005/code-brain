@@ -2,7 +2,7 @@
 
 Turn any codebase into searchable knowledge for Claude Code.
 
-**AST Index** (tree-sitter, 7 languages, with inline snippets) + **File Summaries** (1-line per file) + **LLM Wiki** (markdown, git-shared) + **MCP Server** (9 tools) + **Activity Memory** (7-day, reflection-aware) + **Dependency Graph** (interactive HTML) + **Pattern Learning** (git mining + consolidation).
+**AST Index** (tree-sitter, 12 languages, query-based) + **Incremental Build** (git diff-tree, <2s) + **File Summaries** (1-line per file) + **LLM Wiki** (markdown, git-shared) + **MCP Server** (9 tools) + **Activity Memory** (7-day, reflection-aware) + **Dependency Graph** (interactive HTML) + **Pattern Learning** (git mining + consolidation) + **Watch Mode** (auto-rebuild on save).
 
 ---
 
@@ -23,7 +23,9 @@ Result: **~97% reduction in navigation tokens** (measured on a 545K LOC codebase
 
 | Step | Token cost | Time | Required? |
 |------|-----------|------|-----------|
-| `code-brain build` | 0 (local) | ~15-60s | Yes |
+| `code-brain build` (first) | 0 (local) | ~15-60s | Yes |
+| `code-brain build` (incremental) | 0 (local) | **<2s** | Automatic |
+| `code-brain watch` | 0 (local) | continuous | Optional |
 | `code-brain graph` | 0 (local) | ~2s | Optional |
 | `code-brain extract-patterns` | 0 (local) | ~5-15s | Optional |
 | `code-brain consolidate` | 0 (local) | ~2-5s | Optional |
@@ -45,7 +47,7 @@ claude mcp add code-brain -- npx code-brain serve   # connect MCP tools to Claud
 # Optional: /code-brain in Claude Code to enrich wiki with LLM (~100K tokens)
 ```
 
-That's it. New Claude Code sessions auto-use the wiki + index + MCP tools.
+That's it. Subsequent `build` runs are **incremental** (<2s for single-file changes). Use `code-brain watch` for auto-rebuild on save.
 
 ---
 
@@ -63,15 +65,24 @@ Claude gets code directly from symbol lookup — no need to `Read()` the file af
 |----------|--------|-----------|
 | TypeScript | tree-sitter-typescript | .ts, .tsx |
 | JavaScript | tree-sitter-javascript | .js, .jsx |
-| PHP | tree-sitter-php | .php (+ custom via config) |
+| PHP | tree-sitter-php | .php |
 | Python | tree-sitter-python | .py |
 | Go | tree-sitter-go | .go |
 | Rust | tree-sitter-rust | .rs |
 | Java | tree-sitter-java | .java |
+| C# | tree-sitter-c-sharp* | .cs |
+| Swift | tree-sitter-swift* | .swift |
+| Kotlin | tree-sitter-kotlin* | .kt, .kts |
+| Ruby | tree-sitter-ruby* | .rb |
+| C++ | tree-sitter-cpp* | .cpp, .hpp, .cc, .h |
 
-**Extracts:** classes, interfaces, methods, functions, type aliases, enums, traits, structs.
+\* Optional — install parser only if you need it: `pnpm add tree-sitter-swift`
 
-**Storage:** sql.js (pure JavaScript SQLite, no native builds).
+**Extracts:** classes, interfaces, methods, functions, type aliases, enums, traits, structs, constants.
+
+**Parser architecture:** Declarative `.scm` query files (from tree-sitter repos). Adding a new language = drop a `.scm` file + config entry, no code changes.
+
+**Storage:** better-sqlite3 (native, disk-backed, WAL mode) with sql.js fallback (pure JS, no native builds).
 
 ### 2. LLM Wiki + File Summaries
 
@@ -87,7 +98,21 @@ Claude gets code directly from symbol lookup — no need to `Read()` the file af
 - Stored in `file_summaries` table, queryable via `code_brain_file_summary` MCP tool
 - Claude checks summary BEFORE reading → decides if file is relevant
 
-### 3. MCP Server — 9 Tools
+### 3. Incremental Build + Watch Mode
+
+**Incremental build** (v0.3.0):
+- Detects changes via `git diff-tree` (commits) + mtime/hash (unstaged)
+- Only reparses changed files — skips unchanged
+- Single-file change: **<2s** (vs ~46s full rebuild on 545K LOC)
+- `--force` flag for full rebuild when needed
+- Rename detection via `git diff-tree -M`
+
+**Watch mode**:
+- `code-brain watch` — auto-rebuild on file save
+- chokidar-based, 300ms debounce, extension-filtered
+- Graceful shutdown on Ctrl+C
+
+### 4. MCP Server — 9 Tools
 
 After `claude mcp add code-brain -- npx code-brain serve`:
 
@@ -103,7 +128,7 @@ After `claude mcp add code-brain -- npx code-brain serve`:
 | `code_brain_activity_log` | Log work with reflection (WHY it worked/failed) |
 | `code_brain_patterns` | Query consolidated patterns (filter by module, min success rate) |
 
-### 4. Activity Memory
+### 5. Activity Memory
 
 Claude remembers what it did across sessions. 7-day retention, lazy recall.
 
@@ -122,7 +147,7 @@ Claude remembers what it did across sessions. 7-day retention, lazy recall.
 
 **Manual clear:** `npx code-brain clear-memory`
 
-### 5. Dependency Graph
+### 6. Dependency Graph
 
 `npx code-brain graph` generates an interactive HTML graph:
 - Click module → see symbols, files, purpose, relationships
@@ -131,7 +156,7 @@ Claude remembers what it did across sessions. 7-day retention, lazy recall.
 - Drag/zoom, highlighted connections
 - Typed relationships: `depends_on` (solid), `extends` (dashed red), `implements` (dashed blue)
 
-### 6. Pattern Learning
+### 7. Pattern Learning
 
 **Git mining** (`code-brain extract-patterns`):
 - Scans git log for commits with keywords "fix", "bug", "refactor", "feature"
@@ -144,7 +169,7 @@ Claude remembers what it did across sessions. 7-day retention, lazy recall.
 - Stores in `patterns` table (semantic memory)
 - Queryable via `code_brain_patterns` MCP tool
 
-### 7. Typed Relations
+### 8. Typed Relations
 
 Module dependencies are classified:
 - `depends_on` — import/require statements
@@ -302,7 +327,8 @@ Claude:
 ## CLI Reference
 
 ```bash
-code-brain build [path]                   # Parse codebase → AST index + wiki skeleton
+code-brain build [path] [--force]         # Build index (incremental by default, --force for full)
+code-brain watch [path]                   # Watch source dirs + auto-rebuild on save
 code-brain graph [path]                   # Generate interactive dependency graph
 code-brain extract-patterns [--since=N]   # Mine git commits for fix/refactor patterns
 code-brain consolidate [--since=N]        # Generalize activity log → patterns library
@@ -322,15 +348,17 @@ All data in **one SQLite file** (`.code-brain/index.db`):
 ```
 index.db
 ├── symbols          ← AST symbols (file, line, signature, snippet, module)
+├── symbols_fts      ← FTS5 full-text search index on symbols
 ├── file_summaries   ← 1-line summaries + exports + imports per file
+├── file_meta        ← mtime/size/hash for incremental builds
 ├── modules          ← wiki module data (purpose, dependencies, gotchas)
 ├── relations        ← typed module dependencies
-├── meta             ← build metadata
+├── meta             ← build metadata + schema_version + last_git_commit
 ├── activity_log     ← session memory (reflection, attempts, outcomes)
 └── patterns         ← consolidated patterns (success rate, frequency)
 ```
 
-Pure sql.js (no native builds). Portable, gitignored, rebuild anytime.
+better-sqlite3 (native, WAL mode, mmap) with sql.js fallback. Portable, gitignored, rebuild anytime.
 
 ---
 
@@ -379,21 +407,21 @@ Developer A:                     Developer B:
 
 Tested on a 545K LOC enterprise monorepo:
 
-| Metric | Value |
-|--------|-------|
-| Files parsed | 7,232 |
-| Symbols extracted | 49,088 |
-| Symbols with snippet | 41,553 (84%) |
-| File summaries | 6,566 |
-| Modules discovered | 145 |
-| Relations (typed) | 1,164 (depends_on + extends + implements) |
-| Git patterns extracted | 452 (from 30 days) |
-| Consolidated patterns | 66 |
-| Build time | 42 seconds |
-| Index size | 43 MB |
-| Token savings (wiki only) | 69% |
-| Token savings (wiki + index) | 97% |
-| Token savings (v0.2.0 with snippets) | ~98% |
+| Metric | v0.2.0 | v0.3.0 |
+|--------|--------|--------|
+| Files parsed | 7,232 | 7,232 |
+| Symbols extracted | 49,088 | ~58,000 (query-based captures more) |
+| Symbols with snippet | 41,553 (84%) | ~49,000 (84%) |
+| File summaries | 6,566 | 6,566 |
+| Modules discovered | 145 | 145 |
+| Relations (typed) | 1,164 | 1,164 |
+| Languages supported | 7 | **12** |
+| Full build time | 42s | 42s |
+| **Incremental build (1 file)** | N/A | **<2s** |
+| **Incremental build (10 files)** | N/A | **<5s** |
+| DB driver | sql.js (in-memory, 100MB cap) | **better-sqlite3** (disk, WAL, no cap) |
+| Index size | 43 MB | 43 MB |
+| Token savings | ~98% | ~98% |
 
 ---
 
