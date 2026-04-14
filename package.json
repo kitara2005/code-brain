@@ -27,7 +27,8 @@
     "bin/",
     "skill/",
     "scripts/",
-    "templates/"
+    "templates/",
+    "queries/"
   ],
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.12.1",
