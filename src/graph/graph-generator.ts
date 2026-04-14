@@ -1,9 +1,9 @@
 /** Generate interactive HTML dependency graph from code-brain index */
-import type { Database } from "sql.js";
+import type { DbDriver } from "../db/db-driver.js";
 import fs from "node:fs";
 import path from "node:path";
 
-export function generateGraph(db: Database, outputPath: string, projectName: string): { nodes: number; edges: number } {
+export function generateGraph(db: DbDriver, outputPath: string, projectName: string): { nodes: number; edges: number } {
   // Get top 25 modules by symbol count
   const mods = db.exec("SELECT module, COUNT(*) as cnt FROM symbols WHERE module IS NOT NULL GROUP BY module ORDER BY cnt DESC LIMIT 25");
   if (!mods[0]) return { nodes: 0, edges: 0 };

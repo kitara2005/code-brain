@@ -1,7 +1,7 @@
 /** Mine git commit history for recurring fix/refactor patterns */
 import { execSync } from "node:child_process";
 import path from "node:path";
-import type { Database } from "sql.js";
+import type { DbDriver } from "../db/db-driver.js";
 
 export interface GitPattern {
   category: "fix" | "refactor" | "feature";
@@ -83,7 +83,7 @@ function inferModule(files: string[]): string | undefined {
 }
 
 /** Import git patterns into activity_log as "decision" entries */
-export function importPatternsToActivity(db: Database, patterns: GitPattern[]): number {
+export function importPatternsToActivity(db: DbDriver, patterns: GitPattern[]): number {
   const stmt = db.prepare(
     `INSERT INTO activity_log (timestamp, action_type, summary, files_changed, modules_affected, outcome, details)
      VALUES (?, ?, ?, ?, ?, 'done', ?)`

@@ -4,7 +4,7 @@ import path from "node:path";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
-import { openDb } from "../db.js";
+import { openDb, saveDb } from "../db/index.js";
 import { cleanupActivity } from "../schema.js";
 import { initSchema } from "../schema.js";
 
@@ -201,7 +201,6 @@ server.tool(
       ]);
       stmt.step();
       stmt.free();
-      const { saveDb } = await import("../db.js");
       saveDb(db, indexPath);
       return { content: [{ type: "text" as const, text: `Logged: [${action_type}] ${summary}${reflection ? " (with reflection)" : ""}` }] };
     } catch (e) {

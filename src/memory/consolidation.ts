@@ -1,11 +1,11 @@
 /** Consolidate episodic activity log → semantic patterns library */
-import type { Database } from "sql.js";
+import type { DbDriver } from "../db/db-driver.js";
 
 /**
  * Group activity entries by (action_type + modules + outcome) to identify recurring patterns.
  * Insert/update into patterns table.
  */
-export function consolidateActivity(db: Database, sinceDays: number = 7): number {
+export function consolidateActivity(db: DbDriver, sinceDays: number = 7): number {
   // Group by action_type + modules + outcome
   const stmt = db.prepare(
     `SELECT action_type, modules_affected, outcome,

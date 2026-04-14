@@ -1,11 +1,11 @@
 /** Generate wiki skeleton pages from AST data (no LLM needed) */
 import fs from "node:fs";
 import path from "node:path";
-import type { Database } from "sql.js";
+import type { DbDriver } from "../db/db-driver.js";
 import type { CodeBrainConfig } from "../config.js";
 
 /** Generate wiki skeleton for all modules in the index */
-export function generateWikiSkeleton(db: Database, projectRoot: string, config: CodeBrainConfig): number {
+export function generateWikiSkeleton(db: DbDriver, projectRoot: string, config: CodeBrainConfig): number {
   const wikiDir = path.join(projectRoot, config.wiki.dir);
   const modulesDir = path.join(wikiDir, "modules");
   const templatesDir = path.join(wikiDir, "templates");

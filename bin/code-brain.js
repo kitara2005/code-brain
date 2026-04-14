@@ -20,12 +20,13 @@ const projectRoot = resolve(positionalPath || process.cwd());
 
 switch (command) {
   case "build": {
-    // Step 1: Build AST index
+    // Step 1: Build AST index (incremental by default, --force for full rebuild)
     process.argv[2] = projectRoot; // pass to index-builder
+    // --force flag is read directly by index-builder from process.argv
     await import("../dist/indexer/index-builder.js");
 
     // Step 2: Generate wiki skeleton from index
-    const { openDbReadOnly } = await import("../dist/db.js");
+    const { openDbReadOnly } = await import("../dist/db/index.js");
     const { loadConfig } = await import("../dist/config.js");
     const { generateWikiSkeleton } = await import("../dist/wiki/skeleton-generator.js");
     const config = loadConfig(projectRoot);
@@ -34,6 +35,38 @@ switch (command) {
     db.close();
     console.error(`\nWiki: ${pageCount} module pages at ${config.wiki.dir}`);
     console.error(`\nNext: Run /code-brain in Claude Code to enrich wiki with LLM.`);
+    break;
+  }
+
+  case "watch": {
+    const { openDb } = await import("../dist/db/index.js");
+    const { loadConfig } = await import("../dist/config.js");
+    const { initSchema } = await import("../dist/schema.js");
+    const { startWatchMode } = await import("../dist/indexer/watch-mode.js");
+    const watchConfig = loadConfig(projectRoot);
+    const watchDbPath = resolve(projectRoot, watchConfig.index.path);
+    const watchDb = await openDb(watchDbPath);
+    initSchema(watchDb);
+
+    // Initial build if no index exists
+    const { statSync } = await import("node:fs");
+    if (!existsSync(watchDbPath) || statSync(watchDbPath).size < 100) {
+      console.error("No index found, running initial build...");
+      process.argv[2] = projectRoot;
+      await import("../dist/indexer/index-builder.js");
+    }
+
+    const watcher = startWatchMode(projectRoot, watchConfig, watchDb, watchDbPath);
+
+    // Graceful shutdown
+    const cleanup = () => {
+      console.error("\nShutting down...");
+      watcher.close();
+      watchDb.close();
+      process.exit(0);
+    };
+    process.on("SIGINT", cleanup);
+    process.on("SIGTERM", cleanup);
     break;
   }
 
@@ -88,7 +121,7 @@ switch (command) {
   }
 
   case "graph": {
-    const { openDbReadOnly } = await import("../dist/db.js");
+    const { openDbReadOnly } = await import("../dist/db/index.js");
     const { loadConfig } = await import("../dist/config.js");
     const { generateGraph } = await import("../dist/graph/graph-generator.js");
     const config = loadConfig(projectRoot);
@@ -105,7 +138,7 @@ switch (command) {
   }
 
   case "extract-patterns": {
-    const { openDb, saveDb } = await import("../dist/db.js");
+    const { openDb, saveDb } = await import("../dist/db/index.js");
     const { loadConfig } = await import("../dist/config.js");
     const { initSchema } = await import("../dist/schema.js");
     const { extractGitPatterns, importPatternsToActivity } = await import("../dist/memory/git-pattern-extractor.js");
@@ -123,7 +156,7 @@ switch (command) {
   }
 
   case "consolidate": {
-    const { openDb, saveDb } = await import("../dist/db.js");
+    const { openDb, saveDb } = await import("../dist/db/index.js");
     const { loadConfig } = await import("../dist/config.js");
     const { initSchema } = await import("../dist/schema.js");
     const { consolidateActivity } = await import("../dist/memory/consolidation.js");
@@ -140,7 +173,7 @@ switch (command) {
   }
 
   case "clear-memory": {
-    const { openDb, saveDb } = await import("../dist/db.js");
+    const { openDb, saveDb } = await import("../dist/db/index.js");
     const { loadConfig } = await import("../dist/config.js");
     const { clearActivity } = await import("../dist/schema.js");
     const config = loadConfig(projectRoot);
@@ -164,9 +197,10 @@ switch (command) {
 code-brain — Turn any codebase into searchable knowledge for Claude Code
 
 Usage:
-  code-brain build [path]              Parse codebase → AST index + wiki skeleton
+  code-brain build [path] [--force]    Build index (incremental by default, --force for full rebuild)
+  code-brain watch [path]              Watch source dirs + auto-rebuild on changes
   code-brain graph [path]              Generate interactive dependency graph (opens browser)
-  code-brain serve                     Start MCP server (8 tools, stdio)
+  code-brain serve                     Start MCP server (9 tools, stdio)
   code-brain lint                      Check wiki for dead refs and unenriched pages
   code-brain extract-patterns [--since=7] Mine git commits for fix/refactor patterns
   code-brain consolidate [--since=30]  Generalize activity log → patterns library

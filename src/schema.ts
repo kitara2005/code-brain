@@ -1,7 +1,7 @@
-import type { Database } from "sql.js";
+import type { DbDriver } from "./db/db-driver.js";
 
 /** Initialize SQLite schema */
-export function initSchema(db: Database): void {
+export function initSchema(db: DbDriver): void {
   db.run(`
     CREATE TABLE IF NOT EXISTS modules (
       name TEXT PRIMARY KEY,
@@ -109,25 +109,51 @@ export function initSchema(db: Database): void {
   `);
   db.run(`CREATE INDEX IF NOT EXISTS idx_patterns_name ON patterns(name)`);
   db.run(`CREATE INDEX IF NOT EXISTS idx_patterns_category ON patterns(category)`);
+
+  // File metadata for incremental builds (Phase 2 populates this)
+  db.run(`
+    CREATE TABLE IF NOT EXISTS file_meta (
+      file TEXT PRIMARY KEY,
+      mtime INTEGER NOT NULL,
+      size INTEGER NOT NULL,
+      hash_prefix TEXT,
+      symbol_count INTEGER,
+      parse_time_ms INTEGER
+    )
+  `);
+
+  // FTS5 virtual table for fast fuzzy symbol search (only if SQLite supports it)
+  try {
+    db.run(`
+      CREATE VIRTUAL TABLE IF NOT EXISTS symbols_fts
+        USING fts5(name, kind, module, content=symbols, content_rowid=id)
+    `);
+  } catch {
+    // FTS5 not available in this SQLite build — skip silently
+  }
+
+  // Schema version tracking for auto-migration
+  db.run("INSERT OR IGNORE INTO meta (key, value) VALUES ('schema_version', '2')");
 }
 
 /** Cleanup activity entries older than retentionDays */
-export function cleanupActivity(db: Database, retentionDays: number = 7): number {
+export function cleanupActivity(db: DbDriver, retentionDays: number = 7): number {
   db.run("DELETE FROM activity_log WHERE timestamp < datetime('now', '-' || ? || ' days')", [retentionDays]);
   const result = db.exec("SELECT changes()");
   return result[0]?.values[0]?.[0] as number || 0;
 }
 
 /** Clear all activity entries */
-export function clearActivity(db: Database): void {
+export function clearActivity(db: DbDriver): void {
   db.run("DELETE FROM activity_log");
 }
 
 /** Clear index tables (symbols, modules, relations, file_summaries) but KEEP activity_log + patterns */
-export function clearIndex(db: Database): void {
+export function clearIndex(db: DbDriver): void {
   db.run("DELETE FROM symbols");
   db.run("DELETE FROM modules");
   db.run("DELETE FROM relations");
   db.run("DELETE FROM file_summaries");
-  db.run("DELETE FROM meta");
+  db.run("DELETE FROM file_meta");
+  db.run("DELETE FROM meta WHERE key != 'schema_version'");
 }

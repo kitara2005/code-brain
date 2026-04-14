@@ -1,7 +1,7 @@
 /** Extract 1-line file summaries from source code (top comment, exports, imports) */
 import fs from "node:fs";
 import path from "node:path";
-import type { Database } from "sql.js";
+import type { DbDriver } from "../db/db-driver.js";
 
 export interface FileSummary {
   file: string;
@@ -154,7 +154,7 @@ function extractImports(source: string): string[] {
 }
 
 /** Insert file summary into DB */
-export function insertFileSummary(db: Database, summary: FileSummary, module?: string): void {
+export function insertFileSummary(db: DbDriver, summary: FileSummary, module?: string): void {
   const stmt = db.prepare(
     `INSERT OR REPLACE INTO file_summaries (file, module, summary, exports, imports, line_count)
      VALUES (?, ?, ?, ?, ?, ?)`
