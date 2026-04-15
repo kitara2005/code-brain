@@ -119,18 +119,28 @@ console.log("  4. /code-brain                      ← enrich wiki with LLM (in 
 
 /**
  * Walk up from package dir to find the project root.
- * Project root = first directory ABOVE node_modules that has package.json.
+ * Project root = first ancestor directory that:
+ *   - is NOT inside any node_modules (handles pnpm's nested .pnpm layout)
+ *   - has a package.json
+ * Returns null if not installed as a dependency (dev mode).
  */
 function findProjectRoot(startDir) {
-  // Normalize: find the nearest ancestor NOT inside node_modules
-  const parts = startDir.split(path.sep);
-  const nmIndex = parts.lastIndexOf("node_modules");
-  if (nmIndex === -1) return null; // Not installed as dependency, skip
-
-  // Project root = everything before the last node_modules
-  const root = parts.slice(0, nmIndex).join(path.sep);
-  if (root && fs.existsSync(path.join(root, "package.json"))) {
-    return root;
+  // Respect INIT_CWD if npm/pnpm set it — it points to the real project root
+  if (process.env.INIT_CWD && fs.existsSync(path.join(process.env.INIT_CWD, "package.json"))) {
+    return process.env.INIT_CWD;
   }
-  return null;
+
+  let dir = startDir;
+  while (true) {
+    const parent = path.dirname(dir);
+    if (parent === dir) return null; // reached filesystem root
+    dir = parent;
+
+    // Skip any directory inside a node_modules segment (pnpm: .pnpm/code-brain@X/node_modules/code-brain)
+    if (dir.split(path.sep).includes("node_modules")) continue;
+
+    if (fs.existsSync(path.join(dir, "package.json"))) {
+      return dir;
+    }
+  }
 }
