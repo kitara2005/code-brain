@@ -29,6 +29,11 @@ function query(sql: string, params: any[] = []): any[] {
   return rows;
 }
 
+/** Escape LIKE wildcards (% and _) in user input, to be used with ESCAPE '\' */
+function escLike(s: string): string {
+  return s.replace(/[\\%_]/g, (c) => "\\" + c);
+}
+
 const server = new McpServer({ name: "code-brain", version: "0.1.0" });
 
 server.tool(
@@ -43,8 +48,8 @@ server.tool(
   async ({ query: q, module: mod, kind, limit }) => {
     try {
       // Build filtered query
-      const conditions = ["lower(name) LIKE lower(?)"];
-      const params: any[] = [`%${q}%`];
+      const conditions = [`lower(name) LIKE lower(?) ESCAPE '\\'`];
+      const params: any[] = [`%${escLike(q)}%`];
 
       if (mod) { conditions.push("module = ?"); params.push(mod); }
       if (kind) { conditions.push("kind = ?"); params.push(kind); }
@@ -59,8 +64,8 @@ server.tool(
       if (rows.length < limit && !kind) {
         const modRows = query(
           `SELECT name, path as file, 0 as line_start, '' as signature, purpose as scope, name as module, 'module' as kind
-           FROM modules WHERE lower(name) LIKE lower(?) OR lower(purpose) LIKE lower(?) LIMIT ?`,
-          [`%${q}%`, `%${q}%`, limit - rows.length]
+           FROM modules WHERE lower(name) LIKE lower(?) ESCAPE '\\' OR lower(purpose) LIKE lower(?) ESCAPE '\\' LIMIT ?`,
+          [`%${escLike(q)}%`, `%${escLike(q)}%`, limit - rows.length]
         );
         rows = [...rows, ...modRows];
       }
@@ -94,7 +99,7 @@ server.tool(
   },
   async ({ name, with_snippet }) => {
     let rows = query(`SELECT * FROM symbols WHERE name = ? ORDER BY kind, file`, [name]);
-    if (!rows.length) rows = query(`SELECT * FROM symbols WHERE lower(name) LIKE lower(?) LIMIT 20`, [`%${name}%`]);
+    if (!rows.length) rows = query(`SELECT * FROM symbols WHERE lower(name) LIKE lower(?) ESCAPE '\\' LIMIT 20`, [`%${escLike(name)}%`]);
     if (!rows.length) {
       return { content: [{ type: "text" as const, text: `Symbol '${name}' not found.` }] };
     }
@@ -114,9 +119,10 @@ server.tool(
   "Get 1-line summary of a file + exports + imports. Use BEFORE reading a file to check if it's relevant.",
   { file: z.string().describe("File path or partial match") },
   async ({ file }) => {
-    const pattern = file.includes("/") ? `%${file}` : `%${file}%`;
+    const esc = escLike(file);
+    const pattern = file.includes("/") ? `%${esc}` : `%${esc}%`;
     const rows = query(
-      `SELECT file, module, summary, exports, imports, line_count FROM file_summaries WHERE file LIKE ? LIMIT 10`,
+      `SELECT file, module, summary, exports, imports, line_count FROM file_summaries WHERE file LIKE ? ESCAPE '\\' LIMIT 10`,
       [pattern]
     );
     if (!rows.length) {
@@ -159,8 +165,9 @@ server.tool(
   "List all symbols in a file — mini table of contents.",
   { file: z.string() },
   async ({ file }) => {
-    const pattern = file.includes("/") ? `%${file}` : `%${file}%`;
-    const rows = query(`SELECT name, kind, line_start, line_end, signature, scope FROM symbols WHERE file LIKE ? ORDER BY line_start`, [pattern]);
+    const esc = escLike(file);
+    const pattern = file.includes("/") ? `%${esc}` : `%${esc}%`;
+    const rows = query(`SELECT name, kind, line_start, line_end, signature, scope FROM symbols WHERE file LIKE ? ESCAPE '\\' ORDER BY line_start`, [pattern]);
     const text = rows.length
       ? rows.map((r: any) => `L${r.line_start} ${r.kind} ${r.scope ? `${r.scope}::` : ""}${r.name}${r.signature ? ` ${r.signature}` : ""}`).join("\n")
       : `No symbols in '${file}'.`;
@@ -223,11 +230,11 @@ server.tool(
   },
   async ({ days, action_type, module, outcome, failures_only }) => {
     try {
-      const conditions = [`timestamp > datetime('now', '-${days} days')`];
-      const params: any[] = [];
+      const conditions = ["timestamp > datetime('now', '-' || ? || ' days')"];
+      const params: any[] = [days];
 
       if (action_type) { conditions.push("action_type = ?"); params.push(action_type); }
-      if (module) { conditions.push("modules_affected LIKE ?"); params.push(`%${module}%`); }
+      if (module) { conditions.push("modules_affected LIKE ? ESCAPE '\\'"); params.push(`%${escLike(module)}%`); }
 
       if (failures_only) {
         conditions.push("outcome IN ('abandoned', 'blocked')");
@@ -296,7 +303,7 @@ server.tool(
     try {
       const conditions: string[] = [];
       const params: any[] = [];
-      if (module) { conditions.push("modules LIKE ?"); params.push(`%${module}%`); }
+      if (module) { conditions.push("modules LIKE ? ESCAPE '\\'"); params.push(`%${escLike(module)}%`); }
       if (category) { conditions.push("category = ?"); params.push(category); }
       if (min_success_rate !== undefined) { conditions.push("success_rate >= ?"); params.push(min_success_rate); }
 

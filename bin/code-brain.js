@@ -132,10 +132,10 @@ switch (command) {
     const stats = generateGraph(db, outputPath, config.name);
     db.close();
     console.log(`Graph: ${stats.nodes} modules, ${stats.edges} relations → ${outputPath}`);
-    // Auto-open in browser
-    const { exec } = await import("node:child_process");
-    const cmd = process.platform === "darwin" ? "open" : process.platform === "win32" ? "start" : "xdg-open";
-    exec(`${cmd} "${outputPath}"`);
+    // Auto-open in browser — use execFile to avoid shell injection via outputPath
+    const { execFile } = await import("node:child_process");
+    const opener = process.platform === "darwin" ? "open" : process.platform === "win32" ? "explorer" : "xdg-open";
+    execFile(opener, [outputPath], (err) => { if (err) console.error(`[warn] Could not open: ${err.message}`); });
     break;
   }
 

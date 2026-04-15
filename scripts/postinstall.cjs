@@ -125,9 +125,15 @@ console.log("  4. /code-brain                      ← enrich wiki with LLM (in 
  * Returns null if not installed as a dependency (dev mode).
  */
 function findProjectRoot(startDir) {
-  // Respect INIT_CWD if npm/pnpm set it — it points to the real project root
-  if (process.env.INIT_CWD && fs.existsSync(path.join(process.env.INIT_CWD, "package.json"))) {
-    return process.env.INIT_CWD;
+  // Respect INIT_CWD if npm/pnpm set it — it points to the real project root.
+  // Validate: must be absolute, must exist, must not be inside any node_modules
+  // (prevents abuse where a nested build script exports a bogus INIT_CWD).
+  const initCwd = process.env.INIT_CWD;
+  if (initCwd &&
+      path.isAbsolute(initCwd) &&
+      !initCwd.split(path.sep).includes("node_modules") &&
+      fs.existsSync(path.join(initCwd, "package.json"))) {
+    return initCwd;
   }
 
   let dir = startDir;

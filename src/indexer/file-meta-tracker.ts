@@ -49,8 +49,17 @@ export function getAllFileMeta(db: DbDriver): Map<string, FileMeta> {
   return map;
 }
 
-/** Compute first 16 hex chars of SHA-256 hash for a file */
+/** Max file size we will hash (matches 2MB parser cap) */
+const MAX_HASH_SIZE = 2 * 1024 * 1024;
+
+/** Compute first 16 hex chars of SHA-256 hash for a file (skip if >2MB) */
 export function computeHashPrefix(filePath: string): string {
+  try {
+    const stat = fs.statSync(filePath);
+    if (stat.size > MAX_HASH_SIZE) return "";
+  } catch {
+    return "";
+  }
   const content = fs.readFileSync(filePath);
   return createHash("sha256").update(content).digest("hex").slice(0, 16);
 }

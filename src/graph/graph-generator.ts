@@ -76,11 +76,19 @@ export function generateGraph(db: DbDriver, outputPath: string, projectName: str
   return { nodes: nodes.length, edges: edgeData.length };
 }
 
+/** HTML-escape a string for safe interpolation into HTML/attributes */
+function escHtml(s: string): string {
+  return String(s).replace(/[&<>"']/g, (c) =>
+    ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]!),
+  );
+}
+
 function buildHtml(projectName: string, nodes: any[], edgeData: any[], edgesRaw: any[], edgeCounts: any): string {
+  const safeProjectName = escHtml(projectName);
   return `<!DOCTYPE html>
 <html lang="en"><head>
 <meta charset="UTF-8">
-<title>${projectName} — Module Graph</title>
+<title>${safeProjectName} — Module Graph</title>
 <script src="https://unpkg.com/vis-network@9.1.9/standalone/umd/vis-network.min.js"></script>
 <style>
   *{margin:0;box-sizing:border-box}
@@ -119,7 +127,7 @@ function buildHtml(projectName: string, nodes: any[], edgeData: any[], edgesRaw:
   .shortcut{font-size:10px;color:#444;border:1px solid #333;padding:2px 6px;border-radius:4px}
 </style>
 </head><body>
-<div id="header"><h1>${projectName} Module Graph</h1><span class="badge">${nodes.length} modules</span><span class="badge">${edgeData.length} relations</span><span class="badge">code-brain</span></div>
+<div id="header"><h1>${safeProjectName} Module Graph</h1><span class="badge">${nodes.length} modules</span><span class="badge">${edgeData.length} relations</span><span class="badge">code-brain</span></div>
 <div id="legend">
   <h3>Relations</h3>
   <div class="legend-item"><span class="legend-line" style="border-color:#bdc3c7"></span> depends_on</div>
@@ -139,7 +147,8 @@ const nodesData=${JSON.stringify(nodes)};const edgesData=${JSON.stringify(edgeDa
 const nodes=new vis.DataSet(nodesData.map(n=>({...n,font:{color:'#ddd',size:13,face:'-apple-system,system-ui,sans-serif'},borderWidth:2,shadow:{enabled:true,size:15,x:0,y:4,color:'rgba(0,0,0,0.3)'},scaling:{min:15,max:55,label:{enabled:true,min:11,max:16}}})));
 const edges=new vis.DataSet(edgesData);
 const network=new vis.Network(document.getElementById('graph'),{nodes,edges},{physics:{forceAtlas2Based:{gravitationalConstant:-50,centralGravity:.005,springLength:200,springConstant:.015,damping:.6,avoidOverlap:.3},solver:'forceAtlas2Based',stabilization:{iterations:300}},interaction:{hover:true,tooltipDelay:50},nodes:{shape:'dot'},edges:{selectionWidth:2}});
-network.on('click',function(p){const panel=document.getElementById('detail');if(!p.nodes.length){panel.classList.remove('visible');nodes.forEach(n=>nodes.update({id:n.id,opacity:1}));return}const id=p.nodes[0],node=nodesData.find(n=>n.id===id);if(!node)return;const ce=edgesRaw.filter(e=>e.from===id||e.to===id),cn=new Set([id]);ce.forEach(e=>{cn.add(e.from);cn.add(e.to)});nodes.forEach(n=>nodes.update({id:n.id,opacity:cn.has(n.id)?1:.15}));document.querySelector('#detail-header h2').textContent=node.label;document.getElementById('ds-sym').textContent=node.symbolCount.toLocaleString();document.getElementById('ds-files').textContent=node.fileCount||'—';document.getElementById('ds-rels').textContent=edgeCounts[id]||0;document.getElementById('detail-purpose').textContent=node.purpose||'Run /code-brain to enrich.';const d=ce.filter(e=>e.from===id&&e.kind==='depends_on').map(e=>e.to),u=ce.filter(e=>e.to===id&&e.kind==='depends_on').map(e=>e.from),x=ce.filter(e=>e.from===id&&e.kind==='extends').map(e=>e.to),im=ce.filter(e=>e.from===id&&e.kind==='implements').map(e=>e.to);let h='';if(d.length)h+='<h4>Depends on</h4>'+d.map(m=>'<span class="rel-tag rel-dep" data-mod="'+m+'">'+m+'</span>').join('');if(u.length)h+='<h4>Used by</h4>'+u.map(m=>'<span class="rel-tag rel-used" data-mod="'+m+'">'+m+'</span>').join('');if(x.length)h+='<h4>Extends</h4>'+x.map(m=>'<span class="rel-tag rel-ext" data-mod="'+m+'">'+m+'</span>').join('');if(im.length)h+='<h4>Implements</h4>'+im.map(m=>'<span class="rel-tag rel-impl" data-mod="'+m+'">'+m+'</span>').join('');document.getElementById('detail-rels').innerHTML=h||'<p style="color:#555;font-size:12px">No relations</p>';document.querySelectorAll('.rel-tag').forEach(t=>t.addEventListener('click',()=>{const m=t.dataset.mod;network.selectNodes([m]);network.focus(m,{scale:1.2,animation:true});network.body.emitter.emit('click',{nodes:[m],edges:[]})}));panel.classList.add('visible')});
+function renderRels(container,titleText,list,cls){if(!list.length)return;const h=document.createElement('h4');h.textContent=titleText;container.appendChild(h);for(const m of list){const tag=document.createElement('span');tag.className='rel-tag '+cls;tag.dataset.mod=m;tag.textContent=m;tag.addEventListener('click',()=>{network.selectNodes([m]);network.focus(m,{scale:1.2,animation:true});network.body.emitter.emit('click',{nodes:[m],edges:[]})});container.appendChild(tag)}}
+network.on('click',function(p){const panel=document.getElementById('detail');if(!p.nodes.length){panel.classList.remove('visible');nodes.forEach(n=>nodes.update({id:n.id,opacity:1}));return}const id=p.nodes[0],node=nodesData.find(n=>n.id===id);if(!node)return;const ce=edgesRaw.filter(e=>e.from===id||e.to===id),cn=new Set([id]);ce.forEach(e=>{cn.add(e.from);cn.add(e.to)});nodes.forEach(n=>nodes.update({id:n.id,opacity:cn.has(n.id)?1:.15}));document.querySelector('#detail-header h2').textContent=node.label;document.getElementById('ds-sym').textContent=node.symbolCount.toLocaleString();document.getElementById('ds-files').textContent=node.fileCount||'—';document.getElementById('ds-rels').textContent=edgeCounts[id]||0;document.getElementById('detail-purpose').textContent=node.purpose||'Run /code-brain to enrich.';const d=ce.filter(e=>e.from===id&&e.kind==='depends_on').map(e=>e.to),u=ce.filter(e=>e.to===id&&e.kind==='depends_on').map(e=>e.from),x=ce.filter(e=>e.from===id&&e.kind==='extends').map(e=>e.to),im=ce.filter(e=>e.from===id&&e.kind==='implements').map(e=>e.to);const relsEl=document.getElementById('detail-rels');relsEl.textContent='';renderRels(relsEl,'Depends on',d,'rel-dep');renderRels(relsEl,'Used by',u,'rel-used');renderRels(relsEl,'Extends',x,'rel-ext');renderRels(relsEl,'Implements',im,'rel-impl');if(!relsEl.childNodes.length){const p=document.createElement('p');p.style.cssText='color:#555;font-size:12px';p.textContent='No relations';relsEl.appendChild(p)}panel.classList.add('visible')});
 const si=document.getElementById('search');document.addEventListener('keydown',e=>{if(e.key==='/'&&document.activeElement!==si){e.preventDefault();si.focus()}if(e.key==='Escape'){si.blur();si.value='';nodes.forEach(n=>nodes.update({id:n.id,opacity:1}))}});si.addEventListener('input',()=>{const q=si.value.toLowerCase();if(!q){nodes.forEach(n=>nodes.update({id:n.id,opacity:1}));return}nodes.forEach(n=>{const m=n.id.toLowerCase().includes(q)||(n.purpose||'').toLowerCase().includes(q);nodes.update({id:n.id,opacity:m?1:.1})})});
 </script></body></html>`;
 }

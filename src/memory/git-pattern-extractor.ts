@@ -1,5 +1,5 @@
 /** Mine git commit history for recurring fix/refactor patterns */
-import { execSync } from "node:child_process";
+import { execFileSync } from "node:child_process";
 import path from "node:path";
 import type { DbDriver } from "../db/db-driver.js";
 
@@ -16,11 +16,16 @@ export interface GitPattern {
 export function extractGitPatterns(projectRoot: string, sinceDays: number = 7): GitPattern[] {
   const patterns: GitPattern[] = [];
   try {
+    // Coerce to integer to prevent any injection into CLI arg
+    const days = Math.max(0, Math.floor(Number(sinceDays) || 7));
     // Limit to 2000 commits to avoid ENOBUFS on large repos
-    const log = execSync(
-      `git log --since='${sinceDays} days ago' --max-count=2000 --format='%H|%ai|%s' --name-only`,
-      { cwd: projectRoot, encoding: "utf-8", maxBuffer: 200 * 1024 * 1024, shell: "/bin/bash" }
-    );
+    const log = execFileSync("git", [
+      "log",
+      `--since=${days} days ago`,
+      "--max-count=2000",
+      "--format=%H|%ai|%s",
+      "--name-only",
+    ], { cwd: projectRoot, encoding: "utf-8", maxBuffer: 200 * 1024 * 1024 });
 
     // Split by lines; each commit header starts with "hash|date|subject"
     const lines = log.split("\n");
