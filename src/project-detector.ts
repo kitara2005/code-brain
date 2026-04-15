@@ -12,6 +12,9 @@ const ALWAYS_EXCLUDE = new Set([
   ".gradle", ".idea", ".vscode", "bin", "obj",  // Java/.NET/IDE
   ".terraform", ".serverless",
   "tmp", "temp", "logs", "log",
+  "Pods", "DerivedData", ".swiftpm",  // iOS/Swift Xcode
+  "cmake-build-debug", "cmake-build-release", "CMakeFiles",  // C++ CMake
+  ".dart_tool", ".pub-cache",  // Dart/Flutter
 ]);
 
 /** Common source folder names — prioritize these when found */
