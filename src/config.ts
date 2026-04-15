@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import { detectProjectStructure } from "./project-detector.js";
 
 export interface CodeBrainConfig {
   name: string;
@@ -108,10 +109,23 @@ function assertContained(resolved: string, root: string, label: string): void {
   }
 }
 
-/** Create default config file */
+/** Create config file by auto-detecting project structure */
 export function createDefaultConfig(projectRoot: string): string {
   const configPath = path.join(projectRoot, "code-brain.config.json");
-  const config = { ...DEFAULT_CONFIG, name: path.basename(projectRoot) };
+
+  // Scan project to discover actual source dirs, extensions, and folders to exclude
+  const detected = detectProjectStructure(projectRoot);
+
+  const config: CodeBrainConfig = {
+    ...DEFAULT_CONFIG,
+    name: path.basename(projectRoot),
+    source: {
+      dirs: detected.dirs,
+      extensions: detected.extensions,
+      exclude: detected.exclude,
+    },
+  };
+
   fs.writeFileSync(configPath, JSON.stringify(config, null, 2) + "\n");
   return configPath;
 }
