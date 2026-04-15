@@ -83,6 +83,11 @@ const BUILTIN_LANGUAGES: Record<string, LanguageConfig> = {
     queryFiles: ["queries/cpp-tags.scm"],
     extensions: [".cpp", ".hpp", ".cc", ".h"],
   },
+  dart: {
+    parserModule: "tree-sitter-dart",
+    queryFiles: ["queries/dart-tags.scm"],
+    extensions: [".dart"],
+  },
 };
 
 /** Resolve language config by language key */

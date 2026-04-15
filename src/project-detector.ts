@@ -12,9 +12,11 @@ const ALWAYS_EXCLUDE = new Set([
   ".gradle", ".idea", ".vscode", "bin", "obj",  // Java/.NET/IDE
   ".terraform", ".serverless",
   "tmp", "temp", "logs", "log",
-  "Pods", "DerivedData", ".swiftpm",  // iOS/Swift Xcode
+  "Pods", "DerivedData", ".swiftpm", "xcuserdata",  // iOS/Swift Xcode
   "cmake-build-debug", "cmake-build-release", "CMakeFiles",  // C++ CMake
-  ".dart_tool", ".pub-cache",  // Dart/Flutter
+  ".dart_tool", ".pub-cache", ".flutter-plugins", ".flutter-plugins-dependencies",  // Dart/Flutter
+  "build/ios", "build/android",  // Flutter build outputs (partial match via exclude children)
+  "ephemeral",  // Flutter Windows/macOS ephemeral
 ]);
 
 /** Common source folder names — prioritize these when found */
@@ -39,6 +41,7 @@ const EXT_TO_LANG: Record<string, string> = {
   ".kt": "kotlin", ".kts": "kotlin",
   ".rb": "ruby",
   ".cpp": "cpp", ".hpp": "cpp", ".cc": "cpp", ".h": "cpp",
+  ".dart": "dart",
 };
 
 export interface DetectedStructure {

@@ -83,6 +83,7 @@ After the first build, subsequent runs are **incremental** — only changed file
 | Kotlin | tree-sitter-kotlin | .kt, .kts | Optional* |
 | Ruby | tree-sitter-ruby | .rb | Optional* |
 | C++ | tree-sitter-cpp | .cpp, .hpp, .cc, .h | Optional* |
+| Dart / Flutter | tree-sitter-dart | .dart | Optional* |
 
 \* Install the parser when you need it: `pnpm add tree-sitter-swift`
 
@@ -362,7 +363,7 @@ Measured on a 545K LOC enterprise codebase:
 | Incremental build (10 files) | <5 seconds |
 | Index size | 43 MB |
 | Token savings vs raw navigation | ~97% |
-| Languages supported | 12 |
+| Languages supported | 13 |
 
 All build operations are **free** (run locally, no API calls). Only the optional wiki enrichment uses Claude tokens.
 

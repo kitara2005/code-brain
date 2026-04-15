@@ -47,6 +47,7 @@ const DEFAULT_CONFIG: CodeBrainConfig = {
       ".hpp": "cpp",
       ".cc": "cpp",
       ".h": "cpp",
+      ".dart": "dart",
     },
     exclude: ["node_modules", "vendor", ".git", "dist", "build", "__pycache__"],
   },
