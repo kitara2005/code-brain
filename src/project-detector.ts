@@ -74,13 +74,28 @@ export function detectProjectStructure(projectRoot: string): DetectedStructure {
     }
 
     const absDir = path.join(projectRoot, entry.name);
-    const sample = sampleExtensions(absDir, 3, 50); // sample 50 files, depth 3
+    // depth 6 covers Java/Kotlin Maven layouts (src/main/java/com/example/Foo.java)
+    const sample = sampleExtensions(absDir, 6, 100);
 
     if (sample.size === 0) continue;
 
-    // Has source files → include as source dir
-    sourceDirs.push(entry.name + "/");
+    // Monorepo detection: if folder name is "packages" or "apps" and contains
+    // subdirs each with their own source, expand to sub-packages
+    const subPackages = expandMonorepoFolder(absDir, entry.name);
+    if (subPackages.length > 0) {
+      sourceDirs.push(...subPackages);
+    } else {
+      sourceDirs.push(entry.name + "/");
+    }
     sample.forEach((ext) => extensionsFound.add(ext));
+  }
+
+  // Root-level source files (e.g. flat Python script project, Express app.js)
+  const rootHasSourceFiles = entries.some(e =>
+    e.isFile() && EXT_TO_LANG[path.extname(e.name)]
+  );
+  if (sourceDirs.length === 0 && rootHasSourceFiles) {
+    sourceDirs.push("./");
   }
 
   // Sort source dirs: hinted folders first (src, lib, app, ...), then alphabetically
@@ -117,6 +132,29 @@ export function detectProjectStructure(projectRoot: string): DetectedStructure {
   ].sort();
 
   return { dirs: sourceDirs, extensions, exclude };
+}
+
+/** Detect monorepo sub-packages inside `packages/` or `apps/` folders */
+function expandMonorepoFolder(absDir: string, baseName: string): string[] {
+  if (baseName !== "packages" && baseName !== "apps") return [];
+  let entries: fs.Dirent[];
+  try {
+    entries = fs.readdirSync(absDir, { withFileTypes: true });
+  } catch {
+    return [];
+  }
+  const subPkgs: string[] = [];
+  for (const entry of entries) {
+    if (!entry.isDirectory() || entry.name.startsWith(".")) continue;
+    const subSrc = path.join(absDir, entry.name, "src");
+    // Use src/ inside sub-package if it exists, else the package dir itself
+    if (fs.existsSync(subSrc)) {
+      subPkgs.push(`${baseName}/${entry.name}/src/`);
+    } else {
+      subPkgs.push(`${baseName}/${entry.name}/`);
+    }
+  }
+  return subPkgs;
 }
 
 /** Sample file extensions in a directory up to maxFiles, recursing maxDepth levels */
