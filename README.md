@@ -54,12 +54,12 @@ Claude:
 
 ```bash
 pnpm add -D code-brain                              # 1. Install
-npx code-brain init                                 # 2. Create config file
+npx code-brain init                                 # 2. Auto-detect project structure → config
 npx code-brain build                                # 3. Build index (~15s first time, free)
 claude mcp add code-brain -- npx code-brain serve   # 4. Connect to Claude Code
 ```
 
-That's it. Claude Code now uses the index automatically via MCP tools.
+That's it. `init` scans your project and generates a config tailored to your stack — no manual editing needed for common layouts (Next.js, NestJS, Django, Rails, Go modules, Rust Cargo, Maven/Gradle, Swift SPM, monorepos, ...). Claude Code now uses the index automatically via MCP tools.
 
 After the first build, subsequent runs are **incremental** — only changed files are reparsed (<2s). You can also run `code-brain watch` to auto-rebuild on every file save.
 
@@ -171,24 +171,26 @@ Generates an interactive HTML graph showing how modules depend on each other. Cl
 
 ## Configuration
 
-`code-brain init` creates `code-brain.config.json`:
+`code-brain init` scans your project and writes `code-brain.config.json` tailored to it. You rarely need to edit this file.
+
+**What gets auto-detected:**
+- **Source directories** — top-level folders containing code (e.g. `app/`, `lib/`, `components/` for Next.js; `src/main/java/` for Maven; `Sources/` for Swift)
+- **File extensions** — only languages actually present in your project
+- **Exclude list** — build/cache folders for your stack (`.next`, `target`, `bin`, `obj`, `Pods`, `DerivedData`, `cmake-build-*`, etc.)
+- **Monorepos** — `packages/*/src/` and `apps/*/src/` are expanded to individual sub-packages
+
+**Example output for a Next.js project:**
 
 ```json
 {
-  "name": "my-project",
+  "name": "my-app",
   "source": {
-    "dirs": ["src/"],
+    "dirs": ["app/", "components/", "lib/", "types/", "tests/"],
     "extensions": {
       ".ts": "typescript", ".tsx": "typescript",
-      ".js": "javascript", ".jsx": "javascript",
-      ".php": "php", ".py": "python",
-      ".go": "go", ".rs": "rust", ".java": "java",
-      ".cs": "csharp", ".swift": "swift",
-      ".kt": "kotlin", ".kts": "kotlin",
-      ".rb": "ruby",
-      ".cpp": "cpp", ".hpp": "cpp", ".cc": "cpp", ".h": "cpp"
+      ".js": "javascript", ".mjs": "javascript"
     },
-    "exclude": ["node_modules", "vendor", ".git", "dist", "build"]
+    "exclude": ["node_modules", ".git", "dist", "build", "coverage", ...]
   },
   "wiki": { "dir": "wiki/", "maxLinesPerPage": 200 },
   "index": { "path": ".code-brain/index.db" },
@@ -197,7 +199,7 @@ Generates an interactive HTML graph showing how modules depend on each other. Cl
 }
 ```
 
-Edit `source.dirs` and `source.extensions` to match your project structure. Remove languages you don't use to speed up builds.
+**Manual edits** are supported — add custom `source.dirs`, adjust `memory.retentionDays`, etc.
 
 ---
 
@@ -213,7 +215,15 @@ Postinstall automatically sets up:
 - `/code-brain` skill in `.claude/skills/code-brain/`
 - Wiki instructions appended to `CLAUDE.md`
 
-### Step 2: Build the index
+### Step 2: Generate config
+
+```bash
+npx code-brain init
+```
+
+This scans your project layout and writes a `code-brain.config.json` tailored to your stack. Check the output — for most common projects (Next.js, NestJS, Django, Rails, Go, Rust, Java/Kotlin, Swift, monorepos) you won't need to edit anything.
+
+### Step 3: Build the index
 
 ```bash
 npx code-brain build
@@ -229,19 +239,19 @@ code-brain: Done in 42s
 
 Subsequent builds are incremental (<2s for typical changes).
 
-### Step 3: Connect MCP tools
+### Step 4: Connect MCP tools
 
 ```bash
 claude mcp add code-brain -- npx code-brain serve
 ```
 
-### Step 4: (Optional) Enrich wiki with AI
+### Step 5: (Optional) Enrich wiki with AI
 
 In Claude Code, type: `/code-brain`
 
 This costs ~50-200K tokens (one-time) and fills in Purpose, Gotchas, and Common Tasks for each module wiki page. Not required, but improves module descriptions.
 
-### Step 5: Commit wiki to git
+### Step 6: Commit wiki to git
 
 ```bash
 git add wiki/ .claude/skills/code-brain/ code-brain.config.json CLAUDE.md
