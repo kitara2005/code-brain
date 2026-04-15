@@ -314,6 +314,8 @@ index.db
 
 **Database driver:** Uses better-sqlite3 (native, fast, disk-backed) when available. Falls back to sql.js (pure JavaScript, no native builds needed) automatically. You don't need to configure this.
 
+**FTS5 auto-sync:** The `symbols_fts` table stays synced with `symbols` via SQLite triggers — no full rebuild on incremental updates, so even very large codebases see sub-second incremental builds.
+
 ### Parser Architecture
 
 Symbols are extracted using tree-sitter with declarative `.scm` query files — the same pattern used by GitHub, Sourcegraph, and Neovim. Adding a new language means adding a query file and a config entry, no code changes needed.
@@ -330,6 +332,19 @@ Auto-cleanup:     entries older than retentionDays are removed
 
 ---
 
+## Security & Privacy
+
+- **100% local** — no network calls except the optional Claude API during `/code-brain` wiki enrichment. Your code never leaves your machine.
+- **Parameterized SQL everywhere** — all user input goes through `?` placeholders. `LIKE` queries use `ESCAPE '\'` with input sanitization to prevent wildcard enumeration.
+- **No shell execution** — git is invoked via `execFile` with an arg array; SHA inputs to `git diff-tree` are validated as hex before use.
+- **HTML escaping** — the dependency graph HTML escapes module names + project names; module tags are rendered with `textContent` (never `innerHTML`). Bundled CDN script uses SRI integrity hash.
+- **Path containment** — `source.dirs`, `wiki.dir`, `index.path` are validated to stay within the project root (no `../` escapes).
+- **File size caps** — parser + hasher skip files >2 MB (generated/minified); consolidated GROUP_CONCAT is bounded.
+- **Prototype pollution hardening** — config JSON is stripped of `__proto__`, `constructor`, `prototype` keys before merging.
+- **Postinstall** — validates `INIT_CWD` is absolute, outside `node_modules`, and has a `package.json` before writing any files.
+
+---
+
 ## Benchmarks
 
 Measured on a 545K LOC enterprise codebase:
@@ -343,7 +358,7 @@ Measured on a 545K LOC enterprise codebase:
 | Modules discovered | 145 |
 | Module relations | 1,164 |
 | Full build time | 42 seconds |
-| Incremental build (1 file) | <2 seconds |
+| Incremental build (1 file) | <2 seconds (FTS5 auto-synced via triggers) |
 | Incremental build (10 files) | <5 seconds |
 | Index size | 43 MB |
 | Token savings vs raw navigation | ~97% |
