@@ -153,12 +153,19 @@ function extractImports(source: string): string[] {
   return Array.from(imports);
 }
 
-/** Insert file summary into DB */
+/** Cached prepared statement per DB instance — avoids re-prepare per file */
+const stmtCache = new WeakMap<DbDriver, any>();
+
+/** Insert file summary into DB using a cached prepared statement */
 export function insertFileSummary(db: DbDriver, summary: FileSummary, module?: string): void {
-  const stmt = db.prepare(
-    `INSERT OR REPLACE INTO file_summaries (file, module, summary, exports, imports, line_count)
-     VALUES (?, ?, ?, ?, ?, ?)`
-  );
+  let stmt = stmtCache.get(db);
+  if (!stmt) {
+    stmt = db.prepare(
+      `INSERT OR REPLACE INTO file_summaries (file, module, summary, exports, imports, line_count)
+       VALUES (?, ?, ?, ?, ?, ?)`
+    );
+    stmtCache.set(db, stmt);
+  }
   stmt.bind([
     summary.file,
     module || null,
@@ -168,5 +175,5 @@ export function insertFileSummary(db: DbDriver, summary: FileSummary, module?: s
     summary.lineCount,
   ]);
   stmt.step();
-  stmt.free();
+  stmt.reset();
 }

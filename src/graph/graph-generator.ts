@@ -89,7 +89,7 @@ function buildHtml(projectName: string, nodes: any[], edgeData: any[], edgesRaw:
 <html lang="en"><head>
 <meta charset="UTF-8">
 <title>${safeProjectName} — Module Graph</title>
-<script src="https://unpkg.com/vis-network@9.1.9/standalone/umd/vis-network.min.js"></script>
+<script src="https://unpkg.com/vis-network@9.1.9/standalone/umd/vis-network.min.js" integrity="sha384-yxKDWWf0wwdUj/gPeuL11czrnKFQROnLgY8ll7En9NYoXibgg3C6NK/UDHNtUgWJ" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
 <style>
   *{margin:0;box-sizing:border-box}
   body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif;background:#0f0f1a;color:#e0e0e0;overflow:hidden}

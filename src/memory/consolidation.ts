@@ -6,7 +6,9 @@ import type { DbDriver } from "../db/db-driver.js";
  * Insert/update into patterns table.
  */
 export function consolidateActivity(db: DbDriver, sinceDays: number = 7): number {
-  // Group by action_type + modules + outcome
+  // Group by action_type + modules + outcome.
+  // Use a subquery with LIMIT to bound each group to 30 most-recent rows,
+  // preventing GROUP_CONCAT from unbounded memory growth on active projects.
   const stmt = db.prepare(
     `SELECT action_type, modules_affected, outcome,
             COUNT(*) as freq,
@@ -14,9 +16,13 @@ export function consolidateActivity(db: DbDriver, sinceDays: number = 7): number
             GROUP_CONCAT(reflection, ' | ') as reflections,
             GROUP_CONCAT(conditions_failed, ' | ') as blockers,
             MAX(timestamp) as last_used
-     FROM activity_log
-     WHERE timestamp > datetime('now', '-' || ? || ' days')
-       AND modules_affected IS NOT NULL
+     FROM (
+       SELECT * FROM activity_log
+       WHERE timestamp > datetime('now', '-' || ? || ' days')
+         AND modules_affected IS NOT NULL
+       ORDER BY timestamp DESC
+       LIMIT 5000
+     )
      GROUP BY action_type, modules_affected, outcome
      HAVING freq >= 2`
   );

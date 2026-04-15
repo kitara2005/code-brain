@@ -63,3 +63,9 @@ export function computeHashPrefix(filePath: string): string {
   const content = fs.readFileSync(filePath);
   return createHash("sha256").update(content).digest("hex").slice(0, 16);
 }
+
+/** Compute hash from an already-loaded source string (avoids double file read) */
+export function hashFromContent(source: string): string {
+  if (source.length > MAX_HASH_SIZE) return "";
+  return createHash("sha256").update(source).digest("hex").slice(0, 16);
+}

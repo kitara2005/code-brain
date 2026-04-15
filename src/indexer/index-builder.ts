@@ -9,7 +9,7 @@ import { scanModules, collectFiles } from "./module-scanner.js";
 import { parseFile } from "./ast-parser.js";
 import { extractFileSummary, insertFileSummary } from "./file-summarizer.js";
 import { resolveDependencies } from "./dependency-resolver.js";
-import { upsertFileMeta, computeHashPrefix } from "./file-meta-tracker.js";
+import { upsertFileMeta, hashFromContent } from "./file-meta-tracker.js";
 import { incrementalBuild } from "./incremental-builder.js";
 import type { CodeBrainConfig } from "../config.js";
 import type { DbDriver } from "../db/db-driver.js";
@@ -126,9 +126,9 @@ function fullBuild(projectRoot: string, config: CodeBrainConfig, db: DbDriver, d
         const fileSummary = extractFileSummary(source, relPath);
         insertFileSummary(db, fileSummary, moduleName);
 
-        // Populate file_meta for future incremental builds
+        // Populate file_meta for future incremental builds — reuse source buffer (no re-read)
         const parseTimeMs = Date.now() - parseStart;
-        const hashPrefix = computeHashPrefix(filePath);
+        const hashPrefix = hashFromContent(source);
         upsertFileMeta(db, relPath, stat.mtimeMs, stat.size, hashPrefix, symbols.length, parseTimeMs);
 
         totalFiles++;
@@ -153,8 +153,7 @@ function fullBuild(projectRoot: string, config: CodeBrainConfig, db: DbDriver, d
   }
   insertSym.free();
 
-  // Rebuild FTS5 index
-  try { db.run("INSERT INTO symbols_fts(symbols_fts) VALUES('rebuild')"); } catch {}
+  // FTS5 auto-synced via triggers (see schema.ts)
 
   // Step 3: Resolve dependencies
   console.error("Step 3: Resolving dependencies...");

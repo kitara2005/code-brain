@@ -80,14 +80,17 @@ export function loadConfig(projectRoot: string): CodeBrainConfig {
     throw new Error(`Invalid config at ${configPath}: ${e instanceof Error ? e.message : e}`);
   }
 
+  // Strip dangerous keys before merging to prevent prototype pollution
+  const safe = stripDangerousKeys(userConfig) as Partial<CodeBrainConfig>;
+
   const config: CodeBrainConfig = {
     ...DEFAULT_CONFIG,
-    ...userConfig,
-    source: { ...DEFAULT_CONFIG.source, ...userConfig.source },
-    wiki: { ...DEFAULT_CONFIG.wiki, ...userConfig.wiki },
-    index: { ...DEFAULT_CONFIG.index, ...userConfig.index },
-    memory: { ...DEFAULT_CONFIG.memory, ...userConfig.memory },
-    mcp: { ...DEFAULT_CONFIG.mcp, ...userConfig.mcp },
+    ...safe,
+    source: { ...DEFAULT_CONFIG.source, ...(safe.source ?? {}) },
+    wiki: { ...DEFAULT_CONFIG.wiki, ...(safe.wiki ?? {}) },
+    index: { ...DEFAULT_CONFIG.index, ...(safe.index ?? {}) },
+    memory: { ...DEFAULT_CONFIG.memory, ...(safe.memory ?? {}) },
+    mcp: { ...DEFAULT_CONFIG.mcp, ...(safe.mcp ?? {}) },
   };
 
   // Validate paths stay within project root
@@ -98,6 +101,18 @@ export function loadConfig(projectRoot: string): CodeBrainConfig {
   assertContained(path.resolve(projectRoot, config.index.path), projectRoot, "index.path");
 
   return config;
+}
+
+/** Recursively strip __proto__, constructor, prototype keys to prevent pollution on merge */
+function stripDangerousKeys(obj: any): any {
+  if (!obj || typeof obj !== "object" || Array.isArray(obj)) return obj;
+  const out: any = {};
+  for (const key of Object.keys(obj)) {
+    if (key === "__proto__" || key === "constructor" || key === "prototype") continue;
+    const val = obj[key];
+    out[key] = (val && typeof val === "object" && !Array.isArray(val)) ? stripDangerousKeys(val) : val;
+  }
+  return out;
 }
 
 /** Ensure resolved path doesn't escape project root */

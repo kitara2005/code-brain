@@ -4,7 +4,7 @@ import fs from "node:fs";
 import type { DbDriver } from "../db/db-driver.js";
 import type { CodeBrainConfig } from "../config.js";
 import { detectChanges } from "./change-detector.js";
-import { upsertFileMeta, deleteFileMeta, computeHashPrefix } from "./file-meta-tracker.js";
+import { upsertFileMeta, deleteFileMeta, hashFromContent } from "./file-meta-tracker.js";
 import { parseFile } from "./ast-parser.js";
 import { extractFileSummary, insertFileSummary } from "./file-summarizer.js";
 import { scanModules } from "./module-scanner.js";
@@ -104,9 +104,9 @@ export function incrementalBuild(
         const fileSummary = extractFileSummary(source, relPath);
         insertFileSummary(db, fileSummary, moduleName);
 
-        // Update file_meta
+        // Update file_meta (reuse source buffer — no re-read)
         const parseTimeMs = Date.now() - parseStart;
-        const hashPrefix = computeHashPrefix(absPath);
+        const hashPrefix = hashFromContent(source);
         upsertFileMeta(db, relPath, stat.mtimeMs, stat.size, hashPrefix, symbols.length, parseTimeMs);
       } catch (e) {
         console.error(`  [warn] skipped ${relPath}: ${e instanceof Error ? e.message : "parse error"}`);
@@ -138,8 +138,7 @@ export function incrementalBuild(
         }
       }
     }
-    // 5. Rebuild FTS5 index
-    try { db.run("INSERT INTO symbols_fts(symbols_fts) VALUES('rebuild')"); } catch {}
+    // FTS5 auto-synced via triggers (see schema.ts) — no manual rebuild needed
     db.run("COMMIT");
   } catch (e) {
     db.run("ROLLBACK");

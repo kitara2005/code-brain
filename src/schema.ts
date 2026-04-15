@@ -128,6 +128,17 @@ export function initSchema(db: DbDriver): void {
       CREATE VIRTUAL TABLE IF NOT EXISTS symbols_fts
         USING fts5(name, kind, module, content=symbols, content_rowid=id)
     `);
+    // Triggers auto-sync FTS index with symbols table — avoids full rebuild per incremental
+    db.run(`CREATE TRIGGER IF NOT EXISTS symbols_ai AFTER INSERT ON symbols BEGIN
+      INSERT INTO symbols_fts(rowid, name, kind, module) VALUES (new.id, new.name, new.kind, new.module);
+    END`);
+    db.run(`CREATE TRIGGER IF NOT EXISTS symbols_ad AFTER DELETE ON symbols BEGIN
+      INSERT INTO symbols_fts(symbols_fts, rowid, name, kind, module) VALUES ('delete', old.id, old.name, old.kind, old.module);
+    END`);
+    db.run(`CREATE TRIGGER IF NOT EXISTS symbols_au AFTER UPDATE ON symbols BEGIN
+      INSERT INTO symbols_fts(symbols_fts, rowid, name, kind, module) VALUES ('delete', old.id, old.name, old.kind, old.module);
+      INSERT INTO symbols_fts(rowid, name, kind, module) VALUES (new.id, new.name, new.kind, new.module);
+    END`);
   } catch {
     // FTS5 not available in this SQLite build — skip silently
   }
