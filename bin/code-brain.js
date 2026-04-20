@@ -217,6 +217,46 @@ switch (command) {
     break;
   }
 
+  case "recent-activity": {
+    // Print recent activity — intended for SessionStart hook injection
+    const { openDbReadOnly } = await import("../dist/db/index.js");
+    const { loadConfig } = await import("../dist/config.js");
+    const { formatRecentActivity } = await import("../dist/memory/recent-formatter.js");
+    const cfgR = loadConfig(projectRoot);
+    const dbR = await openDbReadOnly(resolve(projectRoot, cfgR.index.path));
+    const daysR = parseInt(args.find(a => a.startsWith("--days="))?.split("=")[1] || "7", 10);
+    const topR = parseInt(args.find(a => a.startsWith("--top="))?.split("=")[1] || "8", 10);
+    const moduleR = args.find(a => a.startsWith("--module="))?.split("=")[1];
+    const failuresR = args.includes("--failures-only");
+    const out = formatRecentActivity(dbR, { days: daysR, top: topR, module: moduleR, failuresOnly: failuresR });
+    dbR.close();
+    process.stdout.write(out);
+    break;
+  }
+
+  case "checkpoint": {
+    // Auto-log activity from git diff since baseRef — intended for Stop hook
+    const { openDb, saveDb } = await import("../dist/db/index.js");
+    const { loadConfig } = await import("../dist/config.js");
+    const { initSchema } = await import("../dist/schema.js");
+    const { checkpoint } = await import("../dist/memory/checkpoint.js");
+    const cfgC = loadConfig(projectRoot);
+    const dbFileC = resolve(projectRoot, cfgC.index.path);
+    const baseRef = args.find(a => a.startsWith("--base="))?.split("=")[1];
+    const summaryArg = args.find(a => a.startsWith("--summary="))?.split("=")[1];
+    const dbC = await openDb(dbFileC);
+    initSchema(dbC);
+    const result = checkpoint(dbC, projectRoot, { baseRef, summary: summaryArg });
+    saveDb(dbC, dbFileC);
+    dbC.close();
+    if (result.logged) {
+      console.log(`Checkpoint logged: ${result.summary} (${result.filesChanged} files, ${result.commits} commits, modules: ${result.modules.join(", ")})`);
+    } else {
+      console.log(`Checkpoint skipped: ${result.reason}`);
+    }
+    break;
+  }
+
   case "clear-memory": {
     const { openDb, saveDb } = await import("../dist/db/index.js");
     const { loadConfig } = await import("../dist/config.js");
@@ -249,6 +289,9 @@ Usage:
   code-brain lint                      Check wiki for dead refs and unenriched pages
   code-brain extract-patterns [--since=7] Mine git commits for fix/refactor patterns
   code-brain consolidate [--since=30]  Generalize activity log → patterns library
+  code-brain recent-activity [--days=7] [--top=8] [--module=X] [--failures-only]
+                                       Print recent activity (for SessionStart hook)
+  code-brain checkpoint [--base=REF]   Auto-log git diff since REF (for Stop hook)
   code-brain clear-memory              Delete all activity memory entries
   code-brain init                      Create code-brain.config.json template
   code-brain help                      Show this help

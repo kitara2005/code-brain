@@ -142,6 +142,40 @@ Claude remembers what it did across sessions — not just *what*, but *why* it w
 
 **Key design:** Memory is *lazy-loaded* — Claude only queries it when relevant (~500-3500 tokens), not on every session start. Entries older than 7 days are auto-cleaned.
 
+#### Auto-memory via hooks (recommended)
+
+Agents tend to skip optional logging. Wire two Claude Code hooks so memory works automatically:
+
+**SessionStart — inject recent activity as context** (~300 tokens):
+```json
+{
+  "hooks": {
+    "SessionStart": [{
+      "hooks": [{
+        "type": "command",
+        "command": "npx code-brain recent-activity --days=7 --top=5"
+      }]
+    }]
+  }
+}
+```
+
+**Stop — auto-checkpoint git changes at end of session**:
+```json
+{
+  "hooks": {
+    "Stop": [{
+      "hooks": [{
+        "type": "command",
+        "command": "npx code-brain checkpoint --base=HEAD~1"
+      }]
+    }]
+  }
+}
+```
+
+With both hooks wired: agents "see" past failures at session start + work is logged automatically at session end. No agent discipline required.
+
 ### Wiki
 
 Each module in your codebase gets a markdown page with:
