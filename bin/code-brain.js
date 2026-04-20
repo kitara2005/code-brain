@@ -23,17 +23,20 @@ switch (command) {
     // Step 1: Build AST index (incremental by default, --force for full rebuild)
     process.argv[2] = projectRoot; // pass to index-builder
     // --force flag is read directly by index-builder from process.argv
-    await import("../dist/indexer/index-builder.js");
+    const indexModule = await import("../dist/indexer/index-builder.js");
 
-    // Step 2: Generate wiki skeleton from index
+    // Step 2: Generate wiki skeleton — merge with existing enrichment
     const { openDbReadOnly } = await import("../dist/db/index.js");
     const { loadConfig } = await import("../dist/config.js");
     const { generateWikiSkeleton } = await import("../dist/wiki/skeleton-generator.js");
     const config = loadConfig(projectRoot);
     const db = await openDbReadOnly(resolve(projectRoot, config.index.path));
-    const pageCount = generateWikiSkeleton(db, projectRoot, config);
+    // Pass affected modules for incremental wiki (undefined = rebuild all)
+    const changedModules = indexModule.buildAffectedModules;
+    const pageCount = generateWikiSkeleton(db, projectRoot, config, changedModules);
     db.close();
-    console.error(`\nWiki: ${pageCount} module pages at ${config.wiki.dir}`);
+    const mode = changedModules ? `${changedModules.size} changed modules` : "all modules";
+    console.error(`\nWiki: ${pageCount} pages updated (${mode}) — enriched sections preserved`);
     console.error(`\nNext: Run /code-brain in Claude Code to enrich wiki with LLM.`);
     break;
   }

@@ -31,9 +31,13 @@ cleanupActivity(db, config.memory.retentionDays);
 // Decide: incremental or full build
 const hasFileMeta = hasFileMetaData(db);
 
+/** Modules affected by this build — exported for CLI wiki merge */
+export let buildAffectedModules: Set<string> | undefined;
+
 if (!forceRebuild && hasFileMeta) {
   // Incremental build
   const result = incrementalBuild(projectRoot, config, db, dbPath);
+  buildAffectedModules = result?.affectedModules;
   db.close();
   if (result) {
     console.error(`\ncode-brain: Incremental build in ${(result.timeMs / 1000).toFixed(1)}s`);
@@ -42,7 +46,7 @@ if (!forceRebuild && hasFileMeta) {
     console.error("\ncode-brain: Index up to date.");
   }
 } else {
-  // Full build
+  // Full build — all modules affected
   if (forceRebuild) console.error("  (--force: full rebuild)");
   fullBuild(projectRoot, config, db, dbPath);
   db.close();

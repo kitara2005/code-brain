@@ -17,6 +17,8 @@ export interface IncrementalResult {
   filesDeleted: number;
   symbolsUpdated: number;
   timeMs: number;
+  /** Module names that had files changed/deleted — for incremental wiki rebuild */
+  affectedModules: Set<string>;
 }
 
 /** Run incremental build — returns stats or null if no changes detected */
@@ -163,7 +165,7 @@ export function incrementalBuild(
   saveDb(db, dbPath);
 
   const timeMs = Date.now() - startTime;
-  return { filesChanged: changes.changed.length, filesDeleted: changes.deleted.length, symbolsUpdated: totalSymbols, timeMs };
+  return { filesChanged: changes.changed.length, filesDeleted: changes.deleted.length, symbolsUpdated: totalSymbols, timeMs, affectedModules };
 }
 
 /** Find which module a file belongs to */
