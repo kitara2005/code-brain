@@ -34,6 +34,11 @@ function escLike(s: string): string {
   return s.replace(/[\\%_]/g, (c) => "\\" + c);
 }
 
+/** Sanitize a word for FTS5 MATCH — strip all FTS5 operators, keep alphanumeric + underscore */
+function escFts5(s: string): string {
+  return s.replace(/[^a-zA-Z0-9_]/g, "");
+}
+
 const server = new McpServer({ name: "code-brain", version: "0.1.0" });
 
 server.tool(
@@ -54,8 +59,10 @@ server.tool(
         const ftsConditions = [];
         const ftsParams: any[] = [];
 
-        // FTS5 MATCH query — prefix matching for partial words
-        const ftsQuery = q.split(/\s+/).map(w => `${escLike(w)}*`).join(" ");
+        // FTS5 MATCH — sanitize each word, quote for safety, prefix match
+        const words = q.split(/\s+/).map(w => escFts5(w)).filter(w => w.length > 0);
+        if (words.length === 0) throw new Error("empty query after sanitization");
+        const ftsQuery = words.map(w => `"${w}"*`).join(" ");
         ftsConditions.push("symbols_fts MATCH ?");
         ftsParams.push(ftsQuery);
 
@@ -68,7 +75,7 @@ server.tool(
         rows = query(
           `SELECT s.name, s.kind, s.file, s.line_start, s.signature, s.module, s.scope
            FROM symbols_fts f
-           JOIN symbols s ON s.rowid = f.rowid
+           JOIN symbols s ON s.id = f.rowid
            WHERE ${ftsConditions.join(" AND ")} ${joins.join(" ")}
            ORDER BY f.rank
            LIMIT ?`,

@@ -9,20 +9,25 @@ export function consolidateActivity(db: DbDriver, sinceDays: number = 7): number
   // Group by action_type + modules + outcome.
   // Use a subquery with LIMIT to bound each group to 30 most-recent rows,
   // preventing GROUP_CONCAT from unbounded memory growth on active projects.
+  // Single query with success_rate computed inline (no N+1 loop)
   const stmt = db.prepare(
     `SELECT action_type, modules_affected, outcome,
             COUNT(*) as freq,
             GROUP_CONCAT(summary, ' | ') as summaries,
             GROUP_CONCAT(reflection, ' | ') as reflections,
             GROUP_CONCAT(conditions_failed, ' | ') as blockers,
-            MAX(timestamp) as last_used
+            MAX(timestamp) as last_used,
+            (SELECT ROUND(1.0 * SUM(CASE WHEN a2.outcome = 'done' THEN 1 ELSE 0 END) / COUNT(*), 4)
+             FROM activity_log a2
+             WHERE a2.action_type = sub.action_type
+               AND a2.modules_affected = sub.modules_affected) as success_rate
      FROM (
        SELECT * FROM activity_log
        WHERE timestamp > datetime('now', '-' || ? || ' days')
          AND modules_affected IS NOT NULL
        ORDER BY timestamp DESC
        LIMIT 5000
-     )
+     ) sub
      GROUP BY action_type, modules_affected, outcome
      HAVING freq >= 2`
   );
@@ -35,10 +40,15 @@ export function consolidateActivity(db: DbDriver, sinceDays: number = 7): number
   if (groups.length === 0) return 0;
 
   const upsert = db.prepare(
-    `INSERT OR REPLACE INTO patterns
+    `INSERT INTO patterns
        (name, category, modules, approach, gotchas, references_json, success_rate, times_used, last_used,
         when_to_use, when_not_to_use, tradeoff)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+     ON CONFLICT(name) DO UPDATE SET
+       category=excluded.category, modules=excluded.modules, approach=excluded.approach,
+       gotchas=excluded.gotchas, success_rate=excluded.success_rate, times_used=excluded.times_used,
+       last_used=excluded.last_used, when_to_use=excluded.when_to_use,
+       when_not_to_use=excluded.when_not_to_use, tradeoff=excluded.tradeoff`
   );
 
   let count = 0;
@@ -49,19 +59,7 @@ export function consolidateActivity(db: DbDriver, sinceDays: number = 7): number
     const reflections = (g.reflections || "").split(" | ").filter((s: string) => s && s !== "null");
     const blockers = (g.blockers || "").split(" | ").filter((s: string) => s && s !== "null");
 
-    // Compute success rate across action_type+modules
-    const rateStmt = db.prepare(
-      `SELECT
-         SUM(CASE WHEN outcome = 'done' THEN 1 ELSE 0 END) as successes,
-         COUNT(*) as total
-       FROM activity_log
-       WHERE action_type = ? AND modules_affected = ?`
-    );
-    rateStmt.bind([g.action_type, g.modules_affected]);
-    rateStmt.step();
-    const { successes, total } = rateStmt.getAsObject() as any;
-    rateStmt.free();
-    const successRate = total > 0 ? successes / total : 0;
+    const successRate = g.success_rate ?? 0;
 
     // Derive semantic context from reflections + blockers
     const { whenToUse, whenNotToUse, tradeoff } = deriveSemanticContext(
@@ -106,6 +104,14 @@ function deriveSemanticContext(
     // Successful pattern — extract "why it worked" from reflections
     const reasons = reflections.filter(r => r.length > 10).slice(0, 3);
     if (reasons.length) whenToUse = reasons.join("; ");
+  }
+
+  if (outcome === "partial") {
+    // Partial success — has useful context about limitations
+    const reasons = reflections.filter(r => r.length > 10).slice(0, 2);
+    if (reasons.length) tradeoff = reasons.join("; ");
+    const fails = blockers.filter(b => b.length > 5).slice(0, 2);
+    if (fails.length) whenNotToUse = fails.join("; ");
   }
 
   if (outcome === "abandoned" || outcome === "blocked") {

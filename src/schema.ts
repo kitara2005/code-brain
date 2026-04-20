@@ -107,7 +107,7 @@ export function initSchema(db: DbDriver): void {
       last_used TEXT DEFAULT (datetime('now'))
     )
   `);
-  db.run(`CREATE INDEX IF NOT EXISTS idx_patterns_name ON patterns(name)`);
+  db.run(`CREATE UNIQUE INDEX IF NOT EXISTS idx_patterns_name ON patterns(name)`);
   db.run(`CREATE INDEX IF NOT EXISTS idx_patterns_category ON patterns(category)`);
 
   // Semantic pattern columns (v0.4.0 upgrade — when to use, constraints, trade-offs)
@@ -167,6 +167,8 @@ export function clearActivity(db: DbDriver): void {
 /** Clear index tables (symbols, modules, relations, file_summaries) but KEEP activity_log + patterns */
 export function clearIndex(db: DbDriver): void {
   db.run("DELETE FROM symbols");
+  // Rebuild FTS5 from empty content — faster than N per-row trigger deletes
+  try { db.run("INSERT INTO symbols_fts(symbols_fts) VALUES('rebuild')"); } catch {}
   db.run("DELETE FROM modules");
   db.run("DELETE FROM relations");
   db.run("DELETE FROM file_summaries");
