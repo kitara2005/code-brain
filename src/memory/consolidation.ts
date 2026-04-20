@@ -35,8 +35,10 @@ export function consolidateActivity(db: DbDriver, sinceDays: number = 7): number
   if (groups.length === 0) return 0;
 
   const upsert = db.prepare(
-    `INSERT OR REPLACE INTO patterns (name, category, modules, approach, gotchas, references_json, success_rate, times_used, last_used)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    `INSERT OR REPLACE INTO patterns
+       (name, category, modules, approach, gotchas, references_json, success_rate, times_used, last_used,
+        when_to_use, when_not_to_use, tradeoff)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   );
 
   let count = 0;
@@ -61,6 +63,11 @@ export function consolidateActivity(db: DbDriver, sinceDays: number = 7): number
     rateStmt.free();
     const successRate = total > 0 ? successes / total : 0;
 
+    // Derive semantic context from reflections + blockers
+    const { whenToUse, whenNotToUse, tradeoff } = deriveSemanticContext(
+      g.outcome, reflections, blockers, successRate,
+    );
+
     upsert.bind([
       name,
       g.action_type,
@@ -71,6 +78,9 @@ export function consolidateActivity(db: DbDriver, sinceDays: number = 7): number
       successRate,
       g.freq,
       g.last_used || new Date().toISOString(),
+      whenToUse,
+      whenNotToUse,
+      tradeoff,
     ]);
     upsert.step();
     upsert.reset();
@@ -79,6 +89,40 @@ export function consolidateActivity(db: DbDriver, sinceDays: number = 7): number
 
   upsert.free();
   return count;
+}
+
+/**
+ * Derive when_to_use / when_not_to_use / tradeoff from reflection text and outcome data.
+ * Uses heuristics on reflection keywords — not LLM, fully deterministic.
+ */
+function deriveSemanticContext(
+  outcome: string, reflections: string[], blockers: string[], successRate: number,
+): { whenToUse: string | null; whenNotToUse: string | null; tradeoff: string | null } {
+  let whenToUse: string | null = null;
+  let whenNotToUse: string | null = null;
+  let tradeoff: string | null = null;
+
+  if (outcome === "done" && successRate >= 0.8) {
+    // Successful pattern — extract "why it worked" from reflections
+    const reasons = reflections.filter(r => r.length > 10).slice(0, 3);
+    if (reasons.length) whenToUse = reasons.join("; ");
+  }
+
+  if (outcome === "abandoned" || outcome === "blocked") {
+    // Failed pattern — blockers become "when not to use"
+    const fails = blockers.filter(b => b.length > 5).slice(0, 3);
+    if (fails.length) whenNotToUse = fails.join("; ");
+    // Reflections on failures → tradeoff insights
+    const insights = reflections.filter(r => r.length > 10).slice(0, 2);
+    if (insights.length) tradeoff = insights.join("; ");
+  }
+
+  if (successRate > 0 && successRate < 1) {
+    // Mixed outcomes → tradeoff exists
+    tradeoff = tradeoff || `Success rate ${Math.round(successRate * 100)}% — works sometimes, not always`;
+  }
+
+  return { whenToUse, whenNotToUse, tradeoff };
 }
 
 function safeParseList(raw: string | null | undefined): string[] {

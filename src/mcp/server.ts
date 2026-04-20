@@ -47,18 +47,49 @@ server.tool(
   },
   async ({ query: q, module: mod, kind, limit }) => {
     try {
-      // Build filtered query
-      const conditions = [`lower(name) LIKE lower(?) ESCAPE '\\'`];
-      const params: any[] = [`%${escLike(q)}%`];
+      let rows: any[] = [];
 
-      if (mod) { conditions.push("module = ?"); params.push(mod); }
-      if (kind) { conditions.push("kind = ?"); params.push(kind); }
+      // Primary: FTS5 ranked search (if available)
+      try {
+        const ftsConditions = [];
+        const ftsParams: any[] = [];
 
-      params.push(limit);
-      let rows = query(
-        `SELECT name, kind, file, line_start, signature, module, scope FROM symbols WHERE ${conditions.join(" AND ")} LIMIT ?`,
-        params
-      );
+        // FTS5 MATCH query — prefix matching for partial words
+        const ftsQuery = q.split(/\s+/).map(w => `${escLike(w)}*`).join(" ");
+        ftsConditions.push("symbols_fts MATCH ?");
+        ftsParams.push(ftsQuery);
+
+        // Join with symbols for module/kind filtering + full columns
+        const joins: string[] = [];
+        if (mod) { joins.push("AND s.module = ?"); ftsParams.push(mod); }
+        if (kind) { joins.push("AND s.kind = ?"); ftsParams.push(kind); }
+        ftsParams.push(limit);
+
+        rows = query(
+          `SELECT s.name, s.kind, s.file, s.line_start, s.signature, s.module, s.scope
+           FROM symbols_fts f
+           JOIN symbols s ON s.rowid = f.rowid
+           WHERE ${ftsConditions.join(" AND ")} ${joins.join(" ")}
+           ORDER BY f.rank
+           LIMIT ?`,
+          ftsParams,
+        );
+      } catch {
+        // FTS5 not available — fall back to LIKE
+      }
+
+      // Fallback: LIKE search (sql.js without FTS5, or FTS5 returned nothing)
+      if (rows.length === 0) {
+        const conditions = [`lower(name) LIKE lower(?) ESCAPE '\\'`];
+        const params: any[] = [`%${escLike(q)}%`];
+        if (mod) { conditions.push("module = ?"); params.push(mod); }
+        if (kind) { conditions.push("kind = ?"); params.push(kind); }
+        params.push(limit);
+        rows = query(
+          `SELECT name, kind, file, line_start, signature, module, scope FROM symbols WHERE ${conditions.join(" AND ")} LIMIT ?`,
+          params,
+        );
+      }
 
       // Also search modules if no kind/module filter
       if (rows.length < limit && !kind) {
@@ -309,7 +340,8 @@ server.tool(
 
       const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
       const rows = query(
-        `SELECT name, category, modules, approach, gotchas, success_rate, times_used, last_used
+        `SELECT name, category, modules, approach, gotchas, success_rate, times_used, last_used,
+                when_to_use, when_not_to_use, tradeoff
          FROM patterns ${where}
          ORDER BY success_rate DESC, times_used DESC LIMIT 20`,
         params
@@ -322,7 +354,12 @@ server.tool(
       const lines = rows.map((r: any) => {
         const rate = Math.round((r.success_rate || 0) * 100);
         const date = (r.last_used as string).split("T")[0];
-        return `📋 ${r.name} (${rate}% success, ${r.times_used}× used, last: ${date})\n   ${r.approach || ""}${r.gotchas ? `\n   ⚠️  ${r.gotchas}` : ""}`;
+        let line = `📋 ${r.name} (${rate}% success, ${r.times_used}× used, last: ${date})\n   ${r.approach || ""}`;
+        if (r.when_to_use) line += `\n   ✅ When to use: ${r.when_to_use}`;
+        if (r.when_not_to_use) line += `\n   🚫 When NOT to use: ${r.when_not_to_use}`;
+        if (r.tradeoff) line += `\n   ⚖️  Tradeoff: ${r.tradeoff}`;
+        if (r.gotchas) line += `\n   ⚠️  ${r.gotchas}`;
+        return line;
       });
 
       return { content: [{ type: "text" as const, text: `Patterns:\n${lines.join("\n\n")}` }] };

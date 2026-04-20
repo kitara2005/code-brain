@@ -110,6 +110,11 @@ export function initSchema(db: DbDriver): void {
   db.run(`CREATE INDEX IF NOT EXISTS idx_patterns_name ON patterns(name)`);
   db.run(`CREATE INDEX IF NOT EXISTS idx_patterns_category ON patterns(category)`);
 
+  // Semantic pattern columns (v0.4.0 upgrade — when to use, constraints, trade-offs)
+  try { db.run(`ALTER TABLE patterns ADD COLUMN when_to_use TEXT`); } catch {}
+  try { db.run(`ALTER TABLE patterns ADD COLUMN when_not_to_use TEXT`); } catch {}
+  try { db.run(`ALTER TABLE patterns ADD COLUMN tradeoff TEXT`); } catch {}
+
   // File metadata for incremental builds (Phase 2 populates this)
   db.run(`
     CREATE TABLE IF NOT EXISTS file_meta (
