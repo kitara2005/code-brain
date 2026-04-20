@@ -126,7 +126,7 @@ After connecting with `claude mcp add`, Claude Code gets these tools:
 | `code_brain_relations` | Show module dependencies (depends_on, extends, implements) |
 | `code_brain_recent_activity` | What was done in past 7 days (filter by module or failures) |
 | `code_brain_activity_log` | Log what you just did with a reflection (WHY it worked/failed) |
-| `code_brain_patterns` | Query recurring patterns extracted from past work |
+| `code_brain_patterns` | Query patterns with context: when to use, when NOT to use, tradeoffs |
 
 ### Activity Memory
 
@@ -398,7 +398,7 @@ npm update code-brain --registry https://registry.npmjs.org
 pnpm update code-brain --latest
 
 # Or install a specific version
-pnpm add -D code-brain@0.4.1
+pnpm add -D code-brain@latest
 ```
 
 After updating, rebuild the index to pick up schema changes:
@@ -452,6 +452,11 @@ npx code-brain serve                           # Should print "code-brain MCP se
 claude mcp remove code-brain
 claude mcp add code-brain -- npx code-brain serve
 # Restart Claude Code
+```
+
+If `npx` itself fails (minimumReleaseAge, proxy, etc.), use local path:
+```bash
+claude mcp add code-brain -- node node_modules/code-brain/bin/code-brain.js serve
 ```
 
 ### Index seems stale
