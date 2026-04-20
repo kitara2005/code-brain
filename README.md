@@ -64,7 +64,7 @@ That's it. `init` scans your project and generates a config tailored to your sta
 
 After the first build, subsequent runs are **incremental** — only changed files are reparsed (<2s). You can also run `code-brain watch` to auto-rebuild on every file save.
 
-> **Optional:** Run `/code-brain` inside Claude Code to enrich the wiki with AI-generated descriptions (~50-200K tokens, one-time). This improves module summaries but isn't required.
+> **Optional:** Run `/code-brain enrich <module>` inside Claude Code to enrich specific wiki pages with AI (~3-5K tokens per module). For large codebases (50+ modules), enrich modules on-demand as you work on them rather than all at once. The index + MCP tools work without enrichment.
 
 ---
 

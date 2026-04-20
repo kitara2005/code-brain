@@ -111,12 +111,76 @@ Need code?
 ## Usage Commands
 
 ```
-/code-brain              — Full build: wiki (LLM) + index (AST)
+/code-brain              — Full enrich: all unenriched wiki pages (expensive on large codebases)
 /code-brain update       — Update stale modules only
+/code-brain enrich auth  — Enrich ONE specific module (recommended for large codebases)
 /code-brain lint         — Check wiki freshness
 ```
 
-## Process: /code-brain (full build)
+---
+
+## Token Cost Awareness (IMPORTANT)
+
+**`npx code-brain build`** = FREE. Runs locally, no API calls. Run it anytime.
+
+**`/code-brain` enrichment** = EXPENSIVE. LLM reads code + writes wiki pages.
+- ~3-5K tokens per module page
+- 10 modules ≈ 30-50K tokens
+- 50 modules ≈ 150-250K tokens
+- 100+ modules ≈ 500K+ tokens
+
+### Strategy for large codebases (>20 modules)
+
+**DO NOT enrich everything at once.** Instead:
+
+1. **Run `npx code-brain build` first** (free, creates skeleton wiki)
+2. **Enrich only the modules you're about to work on:**
+   ```
+   /code-brain enrich auth
+   /code-brain enrich payment
+   ```
+3. **Enrich more modules over time** as you touch them
+4. **Use `/code-brain update`** to only enrich pages that still have placeholder text
+
+### Priority order for enrichment
+
+Enrich high-value modules first:
+1. Modules you're actively working on today
+2. Modules with the most files (complex, need docs most)
+3. Core/shared modules depended on by many others
+4. Skip: test modules, generated code, simple config modules
+
+### Safe to skip enrichment entirely
+
+The AST index + MCP tools work **without** wiki enrichment. You get:
+- Symbol search (`code_brain_search`, `code_brain_symbol`)
+- File summaries (`code_brain_file_summary`)
+- Module dependencies (`code_brain_relations`)
+- Activity memory (`code_brain_recent_activity`, `code_brain_patterns`)
+
+Wiki enrichment only adds: Purpose descriptions, Gotchas, Common Tasks. Nice to have, not required.
+
+---
+
+## Process: /code-brain enrich [module-name] (recommended)
+
+### Step 1: Read the module's wiki skeleton
+Read `wiki/modules/{module-name}.md` — it already has Key Files, Functions, Dependencies from AST.
+
+### Step 2: Read the top 3-5 source files
+Only read files listed in "Key Files" section. Don't read the entire module.
+
+### Step 3: Fill in LLM sections only
+- **Purpose**: 2-3 sentences explaining what this module does
+- **Gotchas**: Non-obvious behaviors found while reading code
+- **Common Tasks**: "How to add X", "How to modify Y" with file paths
+
+### Step 4: Save
+Write the enriched page back. Build will preserve these sections on future runs.
+
+---
+
+## Process: /code-brain (full enrich — use sparingly)
 
 ### Step 1: Read config
 Read `code-brain.config.json` to learn source directories and languages.
