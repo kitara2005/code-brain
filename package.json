@@ -1,6 +1,6 @@
 {
   "name": "code-brain",
-  "version": "0.6.0",
+  "version": "0.6.1",
   "description": "Turn any codebase into searchable knowledge for Claude Code. LLM Wiki + AST Index + MCP Server.",
   "type": "module",
   "bin": {
