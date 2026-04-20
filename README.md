@@ -57,6 +57,7 @@ pnpm add -D code-brain                              # 1. Install
 npx code-brain init                                 # 2. Auto-detect project structure → config
 npx code-brain build                                # 3. Build index (~15s first time, free)
 claude mcp add code-brain -- npx code-brain serve   # 4. Connect to Claude Code
+# If npx blocked: claude mcp add code-brain -- node node_modules/code-brain/bin/code-brain.js serve
 ```
 
 That's it. `init` scans your project and generates a config tailored to your stack — no manual editing needed for common layouts (Next.js, NestJS, Django, Rails, Go modules, Rust Cargo, Maven/Gradle, Swift SPM, monorepos, ...). Claude Code now uses the index automatically via MCP tools.
@@ -244,6 +245,12 @@ Subsequent builds are incremental (<2s for typical changes).
 
 ```bash
 claude mcp add code-brain -- npx code-brain serve
+```
+
+If `npx` is blocked (pnpm `minimumReleaseAge`, corporate proxy, etc.), use the local path instead:
+
+```bash
+claude mcp add code-brain -- node node_modules/code-brain/bin/code-brain.js serve
 ```
 
 ### Step 5: (Optional) Enrich wiki with AI
