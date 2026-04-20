@@ -117,7 +117,7 @@ After connecting with `claude mcp add`, Claude Code gets these tools:
 
 | Tool | What it does |
 |------|-------------|
-| `code_brain_search` | Fuzzy search for symbols and modules |
+| `code_brain_search` | FTS5-ranked symbol search (relevance-sorted, prefix-aware) |
 | `code_brain_symbol` | Look up a symbol → file:line + code snippet |
 | `code_brain_module` | Get module summary (purpose, key files, gotchas) |
 | `code_brain_file_summary` | 1-line file summary + exports (check before reading a file) |
@@ -381,13 +381,55 @@ All build operations are **free** (run locally, no API calls). Only the optional
 
 ---
 
+## Updating
+
+```bash
+# npm
+npm update code-brain --registry https://registry.npmjs.org
+
+# pnpm
+pnpm update code-brain --latest
+
+# Or install a specific version
+pnpm add -D code-brain@0.4.1
+```
+
+After updating, rebuild the index to pick up schema changes:
+
+```bash
+npx code-brain build --force
+```
+
+The `--force` flag is only needed once after major version updates (e.g., 0.3.x → 0.4.x) to apply new schema columns. Regular updates don't require it.
+
+> **pnpm users:** If pnpm blocks a freshly published version (within 14 days), use:
+> ```bash
+> pnpm add -D code-brain@latest --config.minimumReleaseAgeExclude=code-brain
+> ```
+
+---
+
 ## Troubleshooting
 
 ### `tree-sitter` build fails
 
+Native parsers need to be compiled. Approve builds and rebuild:
+
 ```bash
-pnpm approve-builds
-pnpm rebuild tree-sitter tree-sitter-typescript tree-sitter-javascript tree-sitter-python tree-sitter-go tree-sitter-rust tree-sitter-java tree-sitter-php
+pnpm approve-builds           # Select tree-sitter + better-sqlite3
+pnpm rebuild                  # Build all native dependencies
+```
+
+### pnpm blocks install (minimumReleaseAge)
+
+pnpm v10+ quarantines packages published less than 14 days ago:
+
+```bash
+# One-time bypass for code-brain
+pnpm add -D code-brain@latest --config.minimumReleaseAgeExclude=code-brain
+
+# Or permanently whitelist in project .npmrc:
+echo "minimum-release-age-exclude[]=code-brain" >> .npmrc
 ```
 
 ### 0 symbols after build
