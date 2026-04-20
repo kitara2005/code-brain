@@ -186,7 +186,9 @@ Only read files listed in "Key Files" section. Don't read the entire module.
 ### Step 3: Fill in LLM sections only
 - **Purpose**: 2-3 sentences explaining what this module does
 - **Gotchas**: Non-obvious behaviors found while reading code
-- **Common Tasks**: "How to add X", "How to modify Y" with file paths
+- **Common Tasks**: "How to add X", "How to modify Y" with **FULL relative paths from repo root** (e.g. `components/admin/admin-sidebar.tsx`, NOT `admin-sidebar.tsx`). Template placeholders like `lib/hooks/use-<name>.ts` are OK for describing patterns.
+
+**Why full paths:** Future LLM sessions using the wiki `Read` files directly — no extra `Grep`/`Glob` needed. Short names trigger path resolution searches (wasted tool calls) and risk ambiguous matches.
 
 ### Step 4: Save
 Write the enriched page back. Build will preserve these sections on future runs.
@@ -214,8 +216,10 @@ For each wiki page in `wiki/modules/`:
 3. Fill in these sections with your understanding:
    - **Purpose**: 2-3 sentences explaining what this module does
    - **Gotchas**: Non-obvious behaviors, legacy quirks, known issues
-   - **Common Tasks**: "How to add X", "How to modify Y" with file paths
+   - **Common Tasks**: "How to add X", "How to modify Y" with **FULL relative paths from repo root** (e.g. `lib/payment/checkout.ts`, NOT `checkout.ts`). Template placeholders like `components/<feature>/form.tsx` are OK for patterns.
 4. Keep each page under 200 lines
+
+**Path rule:** Always use full relative paths. Short filenames force future sessions to Grep/Glob to find the file — wastes tokens.
 
 ### Step 4: Update wiki/index.md
 After enriching module pages, update `wiki/index.md`:
@@ -258,8 +262,8 @@ When enriching a module page, follow this structure:
 {2-3 sentences: what this module does, why it exists}
 
 ## Key Files
-- `{file}` — {responsibility}
-(already filled by AST — verify and add descriptions)
+- `{full-relative-path}` — {responsibility}
+(already filled by AST with full paths — verify and add descriptions; do NOT shorten to basename)
 
 ## Class Structure
 (already filled by AST — add context if needed)
@@ -273,8 +277,8 @@ When enriching a module page, follow this structure:
 (READ the code to find these — don't guess)
 
 ## Common Tasks
-- **Add a new {entity}:** {file paths + steps}
-- **Modify {behavior}:** {file paths + steps}
+- **Add a new {entity}:** {full/relative/path.ts + steps}
+- **Modify {behavior}:** {full/relative/path.ts + steps}
 ```
 
 ## Activity Memory

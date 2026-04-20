@@ -98,30 +98,70 @@ switch (command) {
       console.error("No wiki found. Run: code-brain build");
       process.exit(1);
     }
+    // Build basename → full-paths index once by querying the symbols DB
+    const basenameMap = new Map(); // basename → string[] of full paths
+    try {
+      const { openDbReadOnly } = await import("../dist/db/index.js");
+      const db = await openDbReadOnly(resolve(projectRoot, config.index.path));
+      const stmt = db.prepare("SELECT DISTINCT file FROM symbols");
+      while (stmt.step()) {
+        const file = stmt.getAsObject().file;
+        if (!file) continue;
+        const base = file.split("/").pop();
+        if (!basenameMap.has(base)) basenameMap.set(base, []);
+        basenameMap.get(base).push(file);
+      }
+      stmt.free();
+      db.close();
+    } catch { /* no index yet — lint without resolution help */ }
+
     const files = readdirSync(wikiDir).filter(f => f.endsWith(".md"));
     let deadRefs = 0;
+    let resolvedRefs = 0;
     let emptyPurpose = 0;
+    let templateSkipped = 0;
+
     for (const f of files) {
       const content = readFileSync(resolve(wikiDir, f), "utf-8");
 
       // Check dead file references
-      const refs = content.matchAll(/`([^`]+\.(ts|tsx|js|php|csp|py))`/g);
+      const refs = content.matchAll(/`([^`]+\.(ts|tsx|js|jsx|mjs|cjs|php|csp|py|go|rs|java|cs|swift|kt|kts|rb|cpp|hpp|cc|h|dart))`/g);
       for (const ref of refs) {
-        if (!existsSync(resolve(projectRoot, ref[1]))) {
-          console.error(`  ⚠️  ${f}: dead ref → ${ref[1]}`);
-          deadRefs++;
+        const path = ref[1];
+
+        // Skip template placeholders: contains <...>, {...}, [...]
+        if (/[<{\[]/.test(path)) { templateSkipped++; continue; }
+
+        // Exists at full path → OK
+        if (existsSync(resolve(projectRoot, path))) continue;
+
+        // Try basename resolution: if short name + unique match in index → OK
+        if (!path.includes("/")) {
+          const matches = basenameMap.get(path);
+          if (matches && matches.length === 1) {
+            console.error(`  ℹ️  ${f}: short ref '${path}' → should be '${matches[0]}'`);
+            resolvedRefs++;
+            continue;
+          }
+          if (matches && matches.length > 1) {
+            console.error(`  ⚠️  ${f}: ambiguous ref '${path}' (${matches.length} matches)`);
+            deadRefs++;
+            continue;
+          }
         }
+
+        console.error(`  ⚠️  ${f}: dead ref → ${path}`);
+        deadRefs++;
       }
 
-      // Check unenriched pages
-      if (content.includes("_To be filled by")) {
-        emptyPurpose++;
-      }
+      if (content.includes("_To be filled by")) emptyPurpose++;
     }
     console.log(`\nLint: ${files.length} pages`);
-    console.log(`  Dead refs:    ${deadRefs}`);
-    console.log(`  Unenriched:   ${emptyPurpose} (run /code-brain to enrich)`);
-    console.log(`  OK:           ${files.length - emptyPurpose}`);
+    console.log(`  Dead refs:         ${deadRefs}`);
+    console.log(`  Short-name refs:   ${resolvedRefs} (resolvable — consider fixing to full paths)`);
+    console.log(`  Template skipped:  ${templateSkipped} (placeholders like <name>)`);
+    console.log(`  Unenriched:        ${emptyPurpose} (run /code-brain to enrich)`);
+    console.log(`  OK:                ${files.length - emptyPurpose}`);
     break;
   }
 
