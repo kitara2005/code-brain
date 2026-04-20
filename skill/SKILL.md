@@ -95,13 +95,26 @@ code_brain_patterns(module="auth", min_success_rate=0.8)
 ```
 Use when: looking for best approach to a recurring problem.
 
+### Token-efficient Read pattern (IMPORTANT)
+
+When you need to read code after a symbol lookup:
+
+1. `code_brain_symbol("isAbsent")` → tells you `file.ts:1000`
+2. **Do NOT** `Read(file.ts)` (reads entire file — could be 1500+ lines = 35K tokens wasted)
+3. **DO** `Read(file.ts, offset=995, limit=30)` (only the function = ~500 tokens)
+
+Rule: **Never read a full file >200 lines. Always use offset+limit from the line number MCP gave you.**
+
+Same for `code_brain_file_symbols` — it gives line numbers for every symbol. Use those to read targeted sections.
+
 ### Decision tree
 ```
 Need code?
-├── Know the symbol name? → code_brain_symbol (get code directly)
-├── Don't know the name? → code_brain_search (fuzzy search)
-├── Need file context?   → code_brain_file_summary (check BEFORE Read)
-├── Need module overview? → code_brain_module
+├── Know the symbol name? → code_brain_symbol (get snippet directly, often no Read needed)
+├── Need more context?    → Read(file, offset=line-5, limit=50) — NEVER full file
+├── Don't know the name?  → code_brain_search (fuzzy search)
+├── Need file relevance?  → code_brain_file_summary (check BEFORE Read)
+├── Need module overview?  → code_brain_module
 ├── Need to understand deps? → code_brain_relations
 └── All tools unavailable? → Tell user to connect MCP, then fall back to Glob/Grep
 ```
