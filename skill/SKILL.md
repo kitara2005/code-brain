@@ -1,6 +1,6 @@
 ---
 name: code-brain
-description: Compile codebase knowledge into wiki + AST index. Also provides query workflow for navigating code via MCP tools instead of Glob/Grep/Read.
+description: Codebase knowledge + safety net for Claude Code. Query workflow (search symbols via MCP instead of Glob/Grep/Read) + safety checks (blast radius before editing, cycle detection, duplicate detection, regression check before commit).
 ---
 
 # code-brain
@@ -15,6 +15,9 @@ Check if these tools are available in your current session:
 - `code_brain_search`
 - `code_brain_symbol`
 - `code_brain_module`
+- `code_brain_blast_radius`
+- `code_brain_cycles`
+- `code_brain_duplicates`
 
 **If tools are NOT available**, tell the user:
 ```
@@ -121,6 +124,59 @@ Need code?
 
 ---
 
+## Safety Workflow (before editing code)
+
+**Before modifying code, check consequences with safety tools.**
+
+### Before editing a file — check blast radius
+```
+code_brain_blast_radius("auth.ts")
+→ 🔴 Module: auth | Risk: HIGH | Affected: 7
+  Direct dependents: session, api, middleware
+  Transitive: routes, handlers, app, main
+```
+Use when: about to edit a file that might be imported by many modules.
+Rule: **if risk = HIGH, mention it to the user before proceeding.**
+
+### Before adding a new import — check for cycles
+```
+code_brain_cycles()
+→ No circular dependencies found.
+```
+Use when: adding imports between modules. Prevents introducing dependency cycles.
+
+### Before creating a new symbol — check for collisions
+```
+code_brain_duplicates("parseConfig")
+→ Duplicate: "parseConfig" (function) — 2 modules
+  - config: src/config/parser.ts
+  - utils: src/utils/config.ts
+```
+Use when: about to create a function/class. Checks if the name already exists elsewhere.
+
+### After making changes — pre-commit regression check
+```bash
+code-brain check --base=HEAD~1
+→ 🔴 BREAKING: function validateToken (src/auth.ts) [auth]
+   Removed — 3 module(s) depend on auth
+  🟡 WARNING: function parseUser (src/user.ts) [user]
+   Signature changed: (id: string) → (id: string, opts?: ParseOpts)
+```
+Use when: finished editing, before commit. Catches regressions.
+Exit code 1 if breaking changes found — safe to use in CI.
+
+### Safety decision tree
+```
+About to edit code?
+├── High-traffic file?      → code_brain_blast_radius (check impact first)
+├── Adding module import?   → code_brain_cycles (prevent circular deps)
+├── New function/class?     → code_brain_duplicates (check name collision)
+├── Done editing?           → code-brain check (catch regressions pre-commit)
+└── Want codebase overview? → code-brain stats
+```
+
+---
+
 ## Usage Commands
 
 ```
@@ -128,6 +184,13 @@ Need code?
 /code-brain update       — Update stale modules only
 /code-brain enrich auth  — Enrich ONE specific module (recommended for large codebases)
 /code-brain lint         — Check wiki freshness
+```
+
+### CLI Safety & Analysis Commands
+```
+code-brain check [--base=HEAD~1]  — Detect symbol regressions vs a git ref
+code-brain cycles                  — Detect circular module dependencies
+code-brain stats                   — Show codebase health + agent activity metrics
 ```
 
 ---
@@ -313,6 +376,8 @@ Always log abandoned approaches with `outcome="abandoned"` and `conditions_faile
 ## Important Rules
 
 - **MCP first, Glob/Grep second** — always try code_brain_* tools before scanning files
+- **Check blast radius before editing high-traffic files** — prevents unintended side effects
+- **Run `code-brain check` before committing** — catches breaking changes early
 - **Read code before writing** — don't guess purpose or gotchas
 - **Max 200 lines per page** — be concise
 - **Verify file paths exist** before listing them

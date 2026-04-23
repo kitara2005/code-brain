@@ -257,6 +257,46 @@ switch (command) {
     break;
   }
 
+  case "check": {
+    const { openDbReadOnly } = await import("../dist/db/index.js");
+    const { loadConfig } = await import("../dist/config.js");
+    const { checkRegressions, formatRegressions } = await import("../dist/analysis/symbol-regression.js");
+    const config = loadConfig(projectRoot);
+    const db = await openDbReadOnly(resolve(projectRoot, config.index.path));
+    const baseRef = args.find(a => a.startsWith("--base="))?.split("=")[1] || "HEAD~1";
+    const items = await checkRegressions(db, projectRoot, config, baseRef);
+    db.close();
+    console.log(formatRegressions(items));
+    process.exit(items.some(i => i.severity === "breaking") ? 1 : 0);
+    break;
+  }
+
+  case "cycles": {
+    const { openDbReadOnly } = await import("../dist/db/index.js");
+    const { loadConfig } = await import("../dist/config.js");
+    const { detectCycles, formatCycles } = await import("../dist/analysis/cycle-detector.js");
+    const config = loadConfig(projectRoot);
+    const db = await openDbReadOnly(resolve(projectRoot, config.index.path));
+    const cycles = detectCycles(db);
+    db.close();
+    console.log(formatCycles(cycles));
+    process.exit(cycles.length > 0 ? 1 : 0);
+    break;
+  }
+
+  case "stats": {
+    const { openDbReadOnly } = await import("../dist/db/index.js");
+    const { loadConfig } = await import("../dist/config.js");
+    const { gatherStats, formatStats } = await import("../dist/analysis/stats-aggregator.js");
+    const config = loadConfig(projectRoot);
+    const dbPath = resolve(projectRoot, config.index.path);
+    const db = await openDbReadOnly(dbPath);
+    const stats = gatherStats(db, dbPath);
+    db.close();
+    console.log(formatStats(stats));
+    break;
+  }
+
   case "clear-memory": {
     const { openDb, saveDb } = await import("../dist/db/index.js");
     const { loadConfig } = await import("../dist/config.js");
@@ -285,13 +325,16 @@ Usage:
   code-brain build [path] [--force]    Build index (incremental by default, --force for full rebuild)
   code-brain watch [path]              Watch source dirs + auto-rebuild on changes
   code-brain graph [path]              Generate interactive dependency graph (opens browser)
-  code-brain serve                     Start MCP server (9 tools, stdio)
+  code-brain serve                     Start MCP server (12 tools, stdio)
   code-brain lint                      Check wiki for dead refs and unenriched pages
   code-brain extract-patterns [--since=7] Mine git commits for fix/refactor patterns
   code-brain consolidate [--since=30]  Generalize activity log → patterns library
   code-brain recent-activity [--days=7] [--top=8] [--module=X] [--failures-only]
                                        Print recent activity (for SessionStart hook)
   code-brain checkpoint [--base=REF]   Auto-log git diff since REF (for Stop hook)
+  code-brain check [--base=HEAD~1]     Detect symbol regressions vs a git ref (exit 1 if breaking)
+  code-brain cycles                    Detect circular module dependencies (exit 1 if found)
+  code-brain stats                     Show codebase health + agent activity metrics
   code-brain clear-memory              Delete all activity memory entries
   code-brain init                      Create code-brain.config.json template
   code-brain help                      Show this help
@@ -308,6 +351,9 @@ MCP Tools (available after build):
   code_brain_symbol("name")          Exact symbol → file:line
   code_brain_relations("name")       Module dependency graph
   code_brain_file_symbols("file")    All symbols in a file
+  code_brain_blast_radius("file")    Check change impact — affected modules + risk level
+  code_brain_cycles()                Detect circular module dependencies
+  code_brain_duplicates("name?")     Find cross-module symbol name collisions
 `);
     break;
   }

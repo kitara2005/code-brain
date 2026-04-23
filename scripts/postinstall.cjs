@@ -60,6 +60,23 @@ Read \`wiki/index.md\` first when you need to understand a module, find related 
 - \`code_brain_symbol("name")\` — exact function/class → file:line
 - \`code_brain_relations("name")\` — module dependency graph
 - \`code_brain_file_symbols("file")\` — all symbols in a file
+- \`code_brain_blast_radius("file")\` — check change impact before editing
+- \`code_brain_cycles()\` — detect circular module dependencies
+- \`code_brain_duplicates("name")\` — find cross-module name collisions
+
+### Safety Checks (IMPORTANT — do these before editing code)
+
+**Before editing a file**, check blast radius:
+\`code_brain_blast_radius("auth.ts")\` → shows how many modules are affected. If risk = HIGH, warn the user.
+
+**Before adding cross-module imports**, check for cycles:
+\`code_brain_cycles()\` → prevents introducing circular dependencies.
+
+**Before creating new functions/classes**, check for name collisions:
+\`code_brain_duplicates("parseConfig")\` → avoids duplicate symbols across modules.
+
+**After changes, before commit**, run regression check:
+\`code-brain check\` (CLI) → detects removed symbols that had dependents, changed signatures.
 
 ### Activity Memory (IMPORTANT)
 
